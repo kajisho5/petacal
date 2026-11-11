@@ -1008,7 +1008,7 @@ def month_bars(t, x, y, cw, rh, bg, lanes=3, lane_h=21, num=15):
             bw = (b - a + 1) * cw - (2 if starts else 0) - (2 if ends else 0)
             by = y + rh * row + 28 + lane * lane_h
             cb = mix(c, bg, 0.24)
-            p.append(R(bx, by, bw, lane_h - 3, t.get("bar_rx", 5), cb))
+            p.append(R(bx, by, bw, lane_h - 3, 5, cb))
             if starts:
                 p.append(R(bx, by, 3, lane_h - 3, 1.5, c))
             chars = max(1, int((bw - 8) / (11.0 if a == b else 11.6)))
@@ -1274,78 +1274,108 @@ def iphone_pattern_picker(theme):
     return svg(w, h, t["bg"], "".join(b))
 
 
-# ---------- look themes (設定 → 見た目) ----------
-# Each look has its own light and dark values (the app still follows the system appearance).
-LOOKS = {
-    "stylish": {
-        "light": dict(bg="#F4F5F7", cell="#FFFFFF", accent="#1F2A44", accent_text="#1F2A44", glass="#FFFFFF",
-                      field="#ECEEF2", red="#B3261E", bar_rx=2,
-                      cal={"仕事": "#3D5A80", "プライベート": "#5B8E7D", "家族": "#B08968"}),
-        "dark": dict(bg="#0B1020", cell="#151B2E", sheet="#151B2E", field="#1E2640", accent="#4C7DF0",
-                     accent_text="#9DB8FF", glass="#1E2640", glass_stroke="#2F3A5C", sep="#2A3352", red="#FF8A80", bar_rx=2,
-                     cal={"仕事": "#6C9BFF", "プライベート": "#5FD0A5", "家族": "#E8B36B"}),
-    },
-    "cute": {
-        "light": dict(bg="#FFF6F3", cell="#FFFFFF", accent="#E8588A", accent_text="#B4235A", glass="#FFFFFF",
-                      field="#FBE9E4", glass_stroke="#F3D5CD", sep="#EBCFC8", bar_rx=9,
-                      cal={"仕事": "#5BA8E6", "プライベート": "#F08CB0", "家族": "#F2B34A"}),
-        "dark": dict(bg="#201418", cell="#2C1C22", sheet="#2C1C22", field="#3A262E", accent="#E8588A",
-                     accent_text="#FF9CBD", glass="#3A262E", glass_stroke="#55404A", sep="#4A353D", bar_rx=9,
-                     cal={"仕事": "#6CB6F0", "プライベート": "#FF9CBD", "家族": "#F5C063"}),
-    },
-}
-ROUNDED = "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif"
+# ---------- colour presets (設定 → 色分け) ----------
+# 10 families x 5 tones = 50 presets. Each has a name (read by VoiceOver) and its own light/dark value.
+import colorsys
+
+FAMILIES = [("赤", 355, 1.0), ("オレンジ", 25, 1.0), ("黄", 46, 1.0), ("緑", 135, 0.85), ("青緑", 176, 0.9),
+            ("青", 212, 1.0), ("紫", 268, 0.85), ("ピンク", 328, 0.95), ("茶", 24, 0.5), ("グレー", 215, 0.1)]
+TONES = [("あざやか", .78, .48, .56), ("明るい", .85, .62, .68), ("うすい", .70, .78, .80), ("こい", .75, .33, .44), ("くすみ", .32, .52, .58)]
 
 
-def with_look(look, theme, fn):
-    """Render fn() with a look applied on top of the standard light/dark values."""
-    global FONT
-    saved, saved_font = dict(THEMES[theme]), FONT
-    THEMES[theme].update(LOOKS[look][theme])
-    if look == "cute":
-        FONT = ROUNDED     # rounded system font (the PNG preview falls back to the regular face)
-    try:
-        return fn()
-    finally:
-        THEMES[theme].clear()
-        THEMES[theme].update(saved)
-        FONT = saved_font
+def preset(fi, ti, theme):
+    name, hue, k = FAMILIES[fi]
+    tone, sat, l_light, l_dark = TONES[ti]
+    if name == "茶":
+        l_light, l_dark = l_light * 0.85, l_dark * 0.9
+    if name == "グレー" and tone == "くすみ":
+        hue, k = 40, 0.4      # warm grey
+    r, g, bl = colorsys.hls_to_rgb(hue / 360, l_light if theme == "light" else l_dark, sat * k)
+    return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(bl * 255))
 
 
-def iphone_look_picker(theme):
-    """S-05 設定 → 見た目: choose the look."""
+def lum(c):
+    v = [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    v = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in v]
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]
+
+
+# what the sample user has chosen: (group, name, family index, tone index) — None = the calendar's own colour
+COLOR_ROWS = [("カレンダー", "仕事", None), ("カレンダー", "プライベート", None), ("カレンダー", "家族", None),
+              ("記録の種類", "推し活", (7, 0)), ("記録の種類", "収支・FX", (4, 3)), ("記録の種類", "収支・競馬", (3, 4)),
+              ("記録の種類", "日々の記録", (9, 0))]
+
+
+def chevron(x, y, c):
+    return f'<path d="M{x} {y-6}l6 6l-6 6" fill="none" stroke="{c}" stroke-opacity="0.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+
+
+def iphone_colors(theme):
+    """S-05 設定 → 色分け: one colour per calendar and per record type."""
     t = THEMES[theme]
     w, h = 402, 874
     c = t["cell"]
-    b = [status_bar(w, t), gbtn(t, 38, 84, "back", label="設定に戻る"), T(20, 148, "見た目", 28, t["label"], 700),
-         S(t, 20, 174, "色と形の雰囲気を選べます。", 15)]
-    rows = [("標準", "iPhone の標準に合わせた見た目", None, True), ("スタイリッシュ", "落ち着いた色、角ばった形", "stylish", False),
-            ("かわいい", "やわらかい色、丸い形と丸い文字", "cute", False)]
-    for i, (name, sub, look, on) in enumerate(rows):
-        y = 196 + i * 128
-        st = f' stroke="{t["accent"]}" stroke-width="2"' if on else ""
-        b.append(R(16, y, w - 32, 116, 24, c, st))
-        vals = dict(THEMES[theme], **(LOOKS[look][theme] if look else {}))
-        sw = [vals["bg"], vals["accent"]] + list(vals["cal"].values())
-        b.append(R(32, y + 16, 150, 84, 14, vals["bg"], f' stroke="{t["sep"]}"'))
-        rx = vals.get("bar_rx", 5)
-        for k, col in enumerate(sw[2:]):
-            b.append(R(44, y + 30 + k * 20, [96, 70, 120][k], 14, rx, mix(col, vals["bg"], 0.35)))
-            b.append(R(44, y + 30 + k * 20, 3, 14, 1.5, col))
-        b.append(f'<circle cx="160" cy="{y+82}" r="9" fill="{vals["accent"]}"/>')
-        b.append(T(200, y + 44, name, 17, t["label"], 600, bg=c))
-        b.append(S(t, 200, y + 66, sub[:13], 13, bg=c))
-        b.append(S(t, 200, y + 84, sub[13:], 13, bg=c))
-        if on:
-            b.append(f'<g aria-label="選択中"><circle cx="{w-44}" cy="{y+40}" r="11" fill="{t["accent"]}"/>'
-                     + ico("check", w - 44, y + 40, "#FFFFFF", 2.4, .6) + "</g>")
-        else:
-            b.append(f'<circle cx="{w-44}" cy="{y+40}" r="10" fill="none" stroke="{t["sec"]}" stroke-opacity="0.6" stroke-width="1.5"/>')
-            b.append(R(w - 76, y + 80, 40, 20, 10, t["accent"]))
-            b.append(T(w - 56, y + 94, "Pro", 12, "#FFFFFF", 700, "middle", bg=t["accent"]))
-    b.append(S(t, 20, 600, "どの見た目も、iPhone のライト／ダークの設定に合わせて", 13))
-    b.append(S(t, 20, 618, "明るい色と暗い色が切り替わります。", 13))
+    b = [status_bar(w, t), gbtn(t, 38, 84, "back", label="設定に戻る"), T(20, 148, "色分け", 28, t["label"], 700),
+         S(t, 20, 174, "50色から選べます。いつでも変えられます。", 15)]
+    y = 196
+    for grp in ("カレンダー", "記録の種類"):
+        rows = [r for r in COLOR_ROWS if r[0] == grp]
+        b.append(S(t, 32, y + 16, grp, 13))
+        y += 26
+        b.append(R(16, y, w - 32, 52 * len(rows), 24, c))
+        for i, (_, name, ch) in enumerate(rows):
+            cy = y + 26 + i * 52
+            col = preset(ch[0], ch[1], theme) if ch else t["cal"][name]
+            cname = f"{FAMILIES[ch[0]][0]}・{TONES[ch[1]][0]}" if ch else "元の色"
+            b.append(f'<circle cx="46" cy="{cy}" r="12" fill="{col}"/>')
+            b.append(T(70, cy + 6, name, 17, t["label"], bg=c))
+            b.append(S(t, w - 56, cy + 5, cname, 15, "end", bg=c))
+            b.append(chevron(w - 44, cy, t["sec"]))
+            if i:
+                b.append(f'<line x1="70" y1="{cy-26}" x2="{w-16}" y2="{cy-26}" stroke="{t["sep"]}" stroke-width="0.5"/>')
+        y += 52 * len(rows) + 14
+    for i, line in enumerate(["予定を1件だけ別の色にするときは、予定を開いて「色」を", "選びます。", "ここで選んだ色は、このアプリの中だけで使います。",
+                              "Google カレンダーなど、元のカレンダーの色は", "変わりません。"]):
+        b.append(S(t, 32, y + 14 + i * 18 + (6 if i >= 2 else 0), line, 13))
     b.append(tab_bar(w, h, t, active=3))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+def iphone_color_pick(theme, sel=(7, 0), target="推し活"):
+    """S-05 色を選ぶシート: 10 families x 5 tones."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    sh = t["sheet"]
+    b, sy = sheet_base(t, theme, w, h, f"「{target}」の色")
+    b[-1] = gbtn(t, w - 46, sy + 48, "check", "#FFFFFF", fill=t["accent"], label="完了")
+    x0, step = 126, 54
+    for ti, (tone, *_x) in enumerate(TONES):
+        b.append(S(t, x0 + ti * step, sy + 108, tone, 12, "middle", bg=sh))
+    for fi, (fam, *_x) in enumerate(FAMILIES):
+        cy = sy + 142 + fi * 50
+        b.append(T(24, cy + 5, fam, 15, t["label"], bg=sh))
+        for ti, (tone, *_y) in enumerate(TONES):
+            col = preset(fi, ti, theme)
+            cx = x0 + ti * step
+            on = (fi, ti) == sel
+            g = f'<g aria-label="{fam}・{tone}{"（選択中）" if on else ""}"><circle cx="{cx}" cy="{cy}" r="17" fill="{col}"/>'
+            if on:
+                g += f'<circle cx="{cx}" cy="{cy}" r="21.5" fill="none" stroke="{t["label"]}" stroke-width="2"/>'
+                g += ico("check", cx, cy, "#000000" if lum(col) > 0.36 else "#FFFFFF", 2.6, .7)
+            b.append(g + "</g>")
+    # preview of how it looks in the month, then the reset row
+    py = sy + 142 + 10 * 50 + 4
+    col = preset(sel[0], sel[1], theme)
+    b.append(S(t, 24, py + 16, "見本", 13, bg=sh))
+    fill = mix(col, sh, 0.35)
+    b.append(R(70, py, 190, 24, 5, fill))
+    b.append(R(70, py, 3, 24, 1.5, col))
+    b.append(T(80, py + 17, "ソラマメーズ 新譜を購入", 13, t["label"], 500, bg=fill))
+    b.append(S(t, w - 24, py + 16, f"{FAMILIES[sel[0]][0]}・{TONES[sel[1]][0]}", 13, "end", bg=sh))
+    by = py + 44
+    b.append(R(16, by, w - 32, 50, 25, t["field"]))
+    b.append(T(w / 2, by + 31, "最初の色に戻す", 17, t["accent_text"], 500, "middle", bg=t["field"]))
+    b.append(home_ind(w, h, t))
     return svg(w, h, t["bg"], "".join(b))
 
 
@@ -1360,11 +1390,8 @@ for th in ("light", "dark"):
         f"iphone-S-01-amount-{th}.svg": iphone_pattern(th, "amount"),
         f"iphone-S-01-photo-{th}.svg": iphone_pattern(th, "photo"),
         f"iphone-S-05-patterns-{th}.svg": iphone_pattern_picker(th),
-        f"iphone-S-05-looks-{th}.svg": iphone_look_picker(th),
-        f"iphone-S-01-look-stylish-{th}.svg": with_look("stylish", th, lambda: iphone_month(th)),
-        f"iphone-S-01-look-cute-{th}.svg": with_look("cute", th, lambda: iphone_month(th)),
-        f"iphone-S-01-day-look-stylish-{th}.svg": with_look("stylish", th, lambda: iphone_month(th, "day")),
-        f"iphone-S-01-day-look-cute-{th}.svg": with_look("cute", th, lambda: iphone_month(th, "day")),
+        f"iphone-S-05-colors-{th}.svg": iphone_colors(th),
+        f"iphone-S-05-color-pick-{th}.svg": iphone_color_pick(th),
         f"iphone-S-01-dayview-{th}.svg": iphone_dayview(th),
         f"iphone-S-01-empty-{th}.svg": iphone_main(th, empty=True),
         f"iphone-S-01-ax5-{th}.svg": iphone_ax5(th),

@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsScreen: View {
     @Environment(LockGate.self) private var lock
     @State private var lockUnavailable = false
+    @AppStorage("budget.oshi") private var oshiBudget = 0
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -34,10 +35,19 @@ struct SettingsScreen: View {
                 } message: {
                     Text("iPhone にパスコードが設定されていません。「設定」アプリでパスコードを設定してから、もう一度試してください。")
                 }
+                LabeledContent("推し活・趣味の予算（月）") {
+                    HStack(spacing: 4) {
+                        TextField("なし", value: $oshiBudget, format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 120)
+                        Text("円").foregroundStyle(.secondary)
+                    }
+                }
             } header: {
                 Text("記録")
             } footer: {
-                Text("オンにすると、記録・金額・集計は Face ID／Touch ID／パスコードで解除するまで隠れます。予定はそのまま見られます。アプリを閉じると、もう一度ロックされます。")
+                Text("ロックをオンにすると、記録・金額・集計は Face ID／Touch ID／パスコードで解除するまで隠れます。予定はそのまま見られます。アプリを閉じると、もう一度ロックされます。予算を入れると、集計に使った割合が出て、8割を超えたら知らせます（0 で予算なし）。")
             }
             Section {
                 LabeledContent("バージョン", value: version)
@@ -164,6 +174,7 @@ struct ColorSettingsScreen: View {
             }
             .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 

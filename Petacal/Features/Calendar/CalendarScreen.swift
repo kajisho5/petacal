@@ -33,6 +33,8 @@ enum CalendarSheet: Identifiable {
     case record(RecordTarget)
     /// S-03: paste a message and pick the events found in it.
     case importText
+    case bulkPhotos
+    case slots
 
     var id: String {
         switch self {
@@ -43,6 +45,8 @@ enum CalendarSheet: Identifiable {
         case .edit(let item): "edit-\(item.id)"
         case .record(let target): "record-\(target.id)"
         case .importText: "import-text"
+        case .bulkPhotos: "bulk-photos"
+        case .slots: "slots"
         }
     }
 }
@@ -132,9 +136,13 @@ struct CalendarScreen: View {
                         sheet = .importText
                     }
                     .disabled(store.access != .granted)
+                    Button("候補日をつくる（空き時間）", systemImage: "calendar.badge.clock") { sheet = .slots }
+                        .disabled(store.access != .granted)
+                    Divider()
                     Button("記録を追加", systemImage: "square.and.pencil") {
                         sheet = .record(.new(focus.date(calendar: calendar) ?? Date()))
                     }
+                    Button("写真をまとめて記録にする", systemImage: "photo.on.rectangle.angled") { sheet = .bulkPhotos }
                 } label: {
                     Label("追加", systemImage: "plus")
                 }
@@ -248,6 +256,10 @@ private struct CalendarSheetHost: ViewModifier {
                 RecordEditor(target: target)
             case .importText:
                 ImportTextSheet(sheet: $sheet)
+            case .bulkPhotos:
+                BulkPhotosSheet()
+            case .slots:
+                SlotsSheet()
             }
         }
     }

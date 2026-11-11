@@ -9,6 +9,8 @@ struct StatsScreen: View {
     @Environment(LockGate.self) private var lock
     @Query private var records: [Record]
     @State private var month = StatsScreen.currentMonth()
+    @State private var showSummary = false
+    @AppStorage("budget.oshi") private var oshiBudget = 0
 
     private static func currentMonth() -> MonthRef {
         let today = DayKey(date: Date(), calendar: .current)
@@ -50,7 +52,15 @@ struct StatsScreen: View {
                         } else {
                             totalCard
                             dailyCard
+                            if oshiBudget > 0 { budgetCard }
                             if !stats.byCategory.isEmpty { categoryCard }
+                            Button {
+                                showSummary = true
+                            } label: {
+                                Label("まとめ画像をつくる", systemImage: "photo")
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
                         trendCard
                     }
@@ -59,6 +69,9 @@ struct StatsScreen: View {
             }
         }
         .navigationTitle("集計")
+        .sheet(isPresented: $showSummary) {
+            SummarySheet(year: month.year, month: month.month, stats: stats)
+        }
     }
 
     private var monthPicker: some View {
@@ -148,6 +161,33 @@ struct StatsScreen: View {
             }
             .frame(height: CGFloat(rows.count) * 40 + 32)
         }
+    }
+
+    /// 推し活・趣味の予算: how much of this month's budget is used, with a notice from 80%.
+    private var budgetCard: some View {
+        let usage = BudgetUsage(limit: oshiBudget, spent: self.stats.oshiSpent)
+        return Card {
+            Text("推し活・趣味の予算").font(.headline)
+            ProgressView(value: Double(min(usage.spent, usage.limit)), total: Double(max(usage.limit, 1)))
+                .tint(usage.level == .ok ? Color.accentColor : Color.warnAmount)
+                .accessibilityHidden(true)
+            Text("\(Yen.plain(usage.limit))のうち \(Yen.plain(usage.spent))（\(usage.percent)%）")
+                .font(.subheadline)
+                .monospacedDigit()
+            switch usage.level {
+            case .ok:
+                Text("残り \(Yen.plain(usage.remaining))").font(.footnote).foregroundStyle(.secondary)
+            case .near:
+                Label("予算の8割を超えました。残り \(Yen.plain(usage.remaining))", systemImage: "exclamationmark.triangle")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.warnAmount)
+            case .over:
+                Label("予算を \(Yen.plain(-usage.remaining)) 超えています", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.warnAmount)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var trendCard: some View {

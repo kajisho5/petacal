@@ -23,6 +23,7 @@ struct RecordsScreen: View {
     @Query(sort: \Record.day, order: .reverse) private var records: [Record]
     @State private var filter = "all"
     @State private var target: RecordTarget?
+    @State private var bulk = false
 
     private var shown: [Record] {
         filter == "all" ? records : records.filter { $0.kindRaw == filter }
@@ -79,13 +80,20 @@ struct RecordsScreen: View {
         .navigationTitle("記録")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("記録を追加", systemImage: "plus") { add() }
-                    .buttonStyle(.borderedProminent)
+                Menu {
+                    Button("記録を追加", systemImage: "square.and.pencil") { add() }
+                    Button("写真をまとめて記録にする", systemImage: "photo.on.rectangle.angled") { bulk = true }
+                } label: {
+                    Label("追加", systemImage: "plus")
+                }
+                .menuStyle(.button)
+                .buttonStyle(.borderedProminent)
             }
         }
         .sheet(item: $target) { target in
             RecordEditor(target: target)
         }
+        .sheet(isPresented: $bulk) { BulkPhotosSheet() }
     }
 
     private func add() {

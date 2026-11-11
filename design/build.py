@@ -1008,7 +1008,7 @@ def month_bars(t, x, y, cw, rh, bg, lanes=3, lane_h=21, num=15):
             bw = (b - a + 1) * cw - (2 if starts else 0) - (2 if ends else 0)
             by = y + rh * row + 28 + lane * lane_h
             cb = mix(c, bg, 0.24)
-            p.append(R(bx, by, bw, lane_h - 3, 5, cb))
+            p.append(R(bx, by, bw, lane_h - 3, t.get("bar_rx", 5), cb))
             if starts:
                 p.append(R(bx, by, 3, lane_h - 3, 1.5, c))
             chars = max(1, int((bw - 8) / (11.0 if a == b else 11.6)))
@@ -1274,6 +1274,81 @@ def iphone_pattern_picker(theme):
     return svg(w, h, t["bg"], "".join(b))
 
 
+# ---------- look themes (設定 → 見た目) ----------
+# Each look has its own light and dark values (the app still follows the system appearance).
+LOOKS = {
+    "stylish": {
+        "light": dict(bg="#F4F5F7", cell="#FFFFFF", accent="#1F2A44", accent_text="#1F2A44", glass="#FFFFFF",
+                      field="#ECEEF2", red="#B3261E", bar_rx=2,
+                      cal={"仕事": "#3D5A80", "プライベート": "#5B8E7D", "家族": "#B08968"}),
+        "dark": dict(bg="#0B1020", cell="#151B2E", sheet="#151B2E", field="#1E2640", accent="#4C7DF0",
+                     accent_text="#9DB8FF", glass="#1E2640", glass_stroke="#2F3A5C", sep="#2A3352", red="#FF8A80", bar_rx=2,
+                     cal={"仕事": "#6C9BFF", "プライベート": "#5FD0A5", "家族": "#E8B36B"}),
+    },
+    "cute": {
+        "light": dict(bg="#FFF6F3", cell="#FFFFFF", accent="#E8588A", accent_text="#B4235A", glass="#FFFFFF",
+                      field="#FBE9E4", glass_stroke="#F3D5CD", sep="#EBCFC8", bar_rx=9,
+                      cal={"仕事": "#5BA8E6", "プライベート": "#F08CB0", "家族": "#F2B34A"}),
+        "dark": dict(bg="#201418", cell="#2C1C22", sheet="#2C1C22", field="#3A262E", accent="#E8588A",
+                     accent_text="#FF9CBD", glass="#3A262E", glass_stroke="#55404A", sep="#4A353D", bar_rx=9,
+                     cal={"仕事": "#6CB6F0", "プライベート": "#FF9CBD", "家族": "#F5C063"}),
+    },
+}
+ROUNDED = "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif"
+
+
+def with_look(look, theme, fn):
+    """Render fn() with a look applied on top of the standard light/dark values."""
+    global FONT
+    saved, saved_font = dict(THEMES[theme]), FONT
+    THEMES[theme].update(LOOKS[look][theme])
+    if look == "cute":
+        FONT = ROUNDED     # rounded system font (the PNG preview falls back to the regular face)
+    try:
+        return fn()
+    finally:
+        THEMES[theme].clear()
+        THEMES[theme].update(saved)
+        FONT = saved_font
+
+
+def iphone_look_picker(theme):
+    """S-05 設定 → 見た目: choose the look."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    c = t["cell"]
+    b = [status_bar(w, t), gbtn(t, 38, 84, "back", label="設定に戻る"), T(20, 148, "見た目", 28, t["label"], 700),
+         S(t, 20, 174, "色と形の雰囲気を選べます。", 15)]
+    rows = [("標準", "iPhone の標準に合わせた見た目", None, True), ("スタイリッシュ", "落ち着いた色、角ばった形", "stylish", False),
+            ("かわいい", "やわらかい色、丸い形と丸い文字", "cute", False)]
+    for i, (name, sub, look, on) in enumerate(rows):
+        y = 196 + i * 128
+        st = f' stroke="{t["accent"]}" stroke-width="2"' if on else ""
+        b.append(R(16, y, w - 32, 116, 24, c, st))
+        vals = dict(THEMES[theme], **(LOOKS[look][theme] if look else {}))
+        sw = [vals["bg"], vals["accent"]] + list(vals["cal"].values())
+        b.append(R(32, y + 16, 150, 84, 14, vals["bg"], f' stroke="{t["sep"]}"'))
+        rx = vals.get("bar_rx", 5)
+        for k, col in enumerate(sw[2:]):
+            b.append(R(44, y + 30 + k * 20, [96, 70, 120][k], 14, rx, mix(col, vals["bg"], 0.35)))
+            b.append(R(44, y + 30 + k * 20, 3, 14, 1.5, col))
+        b.append(f'<circle cx="160" cy="{y+82}" r="9" fill="{vals["accent"]}"/>')
+        b.append(T(200, y + 44, name, 17, t["label"], 600, bg=c))
+        b.append(S(t, 200, y + 66, sub[:13], 13, bg=c))
+        b.append(S(t, 200, y + 84, sub[13:], 13, bg=c))
+        if on:
+            b.append(f'<g aria-label="選択中"><circle cx="{w-44}" cy="{y+40}" r="11" fill="{t["accent"]}"/>'
+                     + ico("check", w - 44, y + 40, "#FFFFFF", 2.4, .6) + "</g>")
+        else:
+            b.append(f'<circle cx="{w-44}" cy="{y+40}" r="10" fill="none" stroke="{t["sec"]}" stroke-opacity="0.6" stroke-width="1.5"/>')
+            b.append(R(w - 76, y + 80, 40, 20, 10, t["accent"]))
+            b.append(T(w - 56, y + 94, "Pro", 12, "#FFFFFF", 700, "middle", bg=t["accent"]))
+    b.append(S(t, 20, 600, "どの見た目も、iPhone のライト／ダークの設定に合わせて", 13))
+    b.append(S(t, 20, 618, "明るい色と暗い色が切り替わります。", 13))
+    b.append(tab_bar(w, h, t, active=3))
+    return svg(w, h, t["bg"], "".join(b))
+
+
 files = {}
 for th in ("light", "dark"):
     files.update({
@@ -1285,6 +1360,11 @@ for th in ("light", "dark"):
         f"iphone-S-01-amount-{th}.svg": iphone_pattern(th, "amount"),
         f"iphone-S-01-photo-{th}.svg": iphone_pattern(th, "photo"),
         f"iphone-S-05-patterns-{th}.svg": iphone_pattern_picker(th),
+        f"iphone-S-05-looks-{th}.svg": iphone_look_picker(th),
+        f"iphone-S-01-look-stylish-{th}.svg": with_look("stylish", th, lambda: iphone_month(th)),
+        f"iphone-S-01-look-cute-{th}.svg": with_look("cute", th, lambda: iphone_month(th)),
+        f"iphone-S-01-day-look-stylish-{th}.svg": with_look("stylish", th, lambda: iphone_month(th, "day")),
+        f"iphone-S-01-day-look-cute-{th}.svg": with_look("cute", th, lambda: iphone_month(th, "day")),
         f"iphone-S-01-dayview-{th}.svg": iphone_dayview(th),
         f"iphone-S-01-empty-{th}.svg": iphone_main(th, empty=True),
         f"iphone-S-01-ax5-{th}.svg": iphone_ax5(th),

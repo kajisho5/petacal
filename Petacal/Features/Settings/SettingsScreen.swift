@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsScreen: View {
     @Environment(LockGate.self) private var lock
+    @State private var lockUnavailable = false
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -21,7 +22,18 @@ struct SettingsScreen: View {
             Section {
                 Toggle("記録をロック", isOn: Binding(
                     get: { lock.isEnabled },
-                    set: { value in Task { await lock.setEnabled(value) } }))
+                    set: { value in
+                        if value && !LockGate.canAuthenticate {
+                            lockUnavailable = true
+                        } else {
+                            Task { await lock.setEnabled(value) }
+                        }
+                    }))
+                .alert("ロックを使えません", isPresented: $lockUnavailable) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text("iPhone にパスコードが設定されていません。「設定」アプリでパスコードを設定してから、もう一度試してください。")
+                }
             } header: {
                 Text("記録")
             } footer: {

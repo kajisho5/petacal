@@ -116,7 +116,7 @@ public enum JapaneseDateParser {
             guard (0...24).contains(hour), (0...59).contains(minute), !(hour == 24 && minute > 0) else { return }
             if best == nil || location < best!.location { best = (location, hour, minute) }
         }
-        if let regex = try? NSRegularExpression(pattern: #"(午前|午後|朝|夜)?\s*(\d{1,2})時(?:(\d{1,2})分|(半))?"#) {
+        if let regex = try? NSRegularExpression(pattern: #"(午前|午後|朝|夜)?\s*(\d{1,2})時(?!間)(?:(\d{1,2})分|(半))?"#) {
             for m in regex.matches(in: text, range: all) {
                 guard var hour = Int(ns.substring(with: m.range(at: 2))) else { continue }
                 let prefix = m.range(at: 1).location == NSNotFound ? "" : ns.substring(with: m.range(at: 1))

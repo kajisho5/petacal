@@ -122,13 +122,31 @@ struct RecordRow: View {
     }
 }
 
+/// Small decoded photos, kept in memory so lists do not decode full-size photos while scrolling.
+enum ThumbCache {
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func image(for photo: RecordPhoto) -> UIImage? {
+        let key = photo.id.uuidString as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let full = UIImage(data: photo.data) else { return nil }
+        // Keep the shape: the short side becomes 176pt and the view crops the rest.
+        let shortSide = max(min(full.size.width, full.size.height), 1)
+        let scale = min(1, 176 / shortSide)
+        let size = CGSize(width: full.size.width * scale, height: full.size.height * scale)
+        let small = full.preparingThumbnail(of: size) ?? full
+        cache.setObject(small, forKey: key)
+        return small
+    }
+}
+
 struct RecordThumb: View {
     let record: Record
     var size: CGFloat = 44
 
     var body: some View {
         Group {
-            if let data = record.sortedPhotos.first?.data, let image = UIImage(data: data) {
+            if let photo = record.sortedPhotos.first, let image = ThumbCache.image(for: photo) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()

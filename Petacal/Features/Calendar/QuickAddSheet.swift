@@ -17,6 +17,8 @@ struct QuickAddSheet: View {
     @State private var colorPreset: Int?
     @State private var confirmDiscard = false
     @State private var failed = false
+    /// The date and time last taken from the title, so rows edited by hand are not overwritten on every keystroke.
+    @State private var applied: QuickAddParser.Result?
     @FocusState private var titleFocused: Bool
 
     /// Where the sheet started, so words like "15時" apply to the pressed day.
@@ -149,6 +151,8 @@ struct QuickAddSheet: View {
     /// Applies the date and time words found in the title to the rows below.
     private func apply(_ result: QuickAddParser.Result) {
         guard result.day != nil || result.start != nil else { return }
+        if let applied, applied.day == result.day, applied.start == result.start, applied.end == result.end { return }
+        applied = result
         let calendar = store.calendar
         let dayStart = result.day?.date(calendar: calendar) ?? calendar.startOfDay(for: result.start != nil ? baseDay : start)
         if let time = result.start {

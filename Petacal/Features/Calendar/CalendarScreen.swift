@@ -95,6 +95,9 @@ struct CalendarScreen: View {
             if store.access == .denied {
                 AccessDeniedBanner()
             }
+            if store.access == .notDetermined && !records.isEmpty {
+                AccessAskBanner { Task { await store.requestAccess() } }
+            }
             if store.access == .notDetermined && records.isEmpty {
                 AccessIntro { Task { await store.requestAccess() } }
             } else {
@@ -123,6 +126,7 @@ struct CalendarScreen: View {
                 } label: {
                     Label("追加", systemImage: "plus")
                 }
+                .menuStyle(.button)
                 .buttonStyle(.borderedProminent)
             }
         }
@@ -238,6 +242,25 @@ private struct AccessIntro: View {
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxHeight: .infinity)
+    }
+}
+
+/// Shown above the calendar when records exist but calendar access was never asked.
+private struct AccessAskBanner: View {
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("この iPhone のカレンダーの予定も、ここに並べられます。")
+                .font(.subheadline)
+            Button("続ける", action: action)
+                .font(.subheadline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+        .padding(.bottom, 8)
     }
 }
 

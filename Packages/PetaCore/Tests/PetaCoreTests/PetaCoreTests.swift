@@ -365,3 +365,54 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(byID["d"] == TimedPlacement(id: "d", start: 13 * 60, end: 13 * 60 + 30, column: 0, columnCount: 1))
     }
 }
+
+@Suite struct QuickAddParserTests {
+    private let now = at(2026, 11, 11, 9, 41)
+
+    private func parse(_ text: String) -> QuickAddParser.Result {
+        QuickAddParser.parse(text, now: now, calendar: jst)
+    }
+
+    @Test func readsTheDesignSample() {
+        let result = parse("明日15時 打ち合わせ")
+        #expect(result.title == "打ち合わせ")
+        #expect(result.day == DayKey(year: 2026, month: 11, day: 12))
+        #expect(result.start == QuickAddParser.Time(hour: 15, minute: 0))
+        #expect(result.end == nil)
+        #expect(result.matched == ["明日", "15時"])
+    }
+
+    @Test func keepsPlainTitles() {
+        let result = parse("そらまめ商店に電話")
+        #expect(result.title == "そらまめ商店に電話")
+        #expect(result.day == nil)
+        #expect(result.start == nil)
+        #expect(result.matched.isEmpty)
+    }
+
+    @Test func readsDatesParticlesAndRanges() {
+        let a = parse("11/20(金)の資料提出")
+        #expect(a.title == "資料提出")
+        #expect(a.day == DayKey(year: 2026, month: 11, day: 20))
+        #expect(a.start == nil)
+
+        let b = parse("懇親会 25日 19:00〜21:30")
+        #expect(b.title == "懇親会")
+        #expect(b.day == DayKey(year: 2026, month: 11, day: 25))
+        #expect(b.start == QuickAddParser.Time(hour: 19, minute: 0))
+        #expect(b.end == QuickAddParser.Time(hour: 21, minute: 30))
+
+        let c = parse("午後3時半から歯医者")
+        #expect(c.title == "歯医者")
+        #expect(c.day == nil)
+        #expect(c.start == QuickAddParser.Time(hour: 15, minute: 30))
+
+        let d = parse("午後3時〜5時 作業")
+        #expect(d.start == QuickAddParser.Time(hour: 15, minute: 0))
+        #expect(d.end == QuickAddParser.Time(hour: 17, minute: 0))
+        #expect(d.title == "作業")
+
+        #expect(parse("3日間の合宿").day == nil)
+        #expect(parse("").title == "")
+    }
+}

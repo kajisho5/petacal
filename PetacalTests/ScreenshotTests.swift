@@ -56,8 +56,12 @@ import UIKit
                        style: UIUserInterfaceStyle = .dark) async throws {
         UserDefaults.standard.set(mode.rawValue, forKey: "calendar.mode")
         UserDefaults.standard.set(pattern.rawValue, forKey: "calendar.pattern")
+        try await render(name, style: style, view: AnyView(NavigationStack { CalendarScreen() }))
+    }
+
+    private func render(_ name: String, style: UIUserInterfaceStyle, view: AnyView) async throws {
         let colors = ColorStore(defaults: UserDefaults(suiteName: "petacal-tests-shots")!)
-        let root = NavigationStack { CalendarScreen() }
+        let root = view
             .environment(CalendarStore(sample: ScreenshotTests.sample()))
             .environment(colors)
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
@@ -83,4 +87,12 @@ import UIKit
     @Test func monthDots() async throws { try await shoot("month-dots-dark", mode: .month, pattern: .dots) }
     @Test func week() async throws { try await shoot("week-dark", mode: .week) }
     @Test func day() async throws { try await shoot("day-light", mode: .day, style: .light) }
+
+    @Test func quickAdd() async throws {
+        let start = Calendar.current.startOfDay(for: Date())
+        for (name, style) in [("quick-add-dark", UIUserInterfaceStyle.dark), ("quick-add-light", .light)] {
+            try await render(name, style: style, view: AnyView(
+                QuickAddSheet(start: start, allDay: true, sheet: .constant(nil), text: "明日15時 打ち合わせ")))
+        }
+    }
 }

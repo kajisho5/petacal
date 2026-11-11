@@ -7,6 +7,7 @@ struct TimelineScreen: View {
     let today: DayKey
     @Binding var focus: DayKey
     @Binding var sheet: CalendarSheet?
+    @Binding var pressCount: Int
 
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
@@ -32,7 +33,9 @@ struct TimelineScreen: View {
                             HStack(alignment: .top, spacing: 0) {
                                 ForEach(days, id: \.self) { day in
                                     DayColumn(day: day, isToday: day == today, hourHeight: hourHeight,
-                                              compact: isWeek) { sheet = .event($0) }
+                                              compact: isWeek) { sheet = .event($0) } onLongPress: { minutes in
+                                        addEvent(on: day, minutes: minutes)
+                                    }
                                 }
                             }
                         }
@@ -130,6 +133,14 @@ struct TimelineScreen: View {
         }
     }
 
+    /// Long press on an empty time: a new one-hour event starting at that half hour.
+    private func addEvent(on day: DayKey, minutes: Int) {
+        guard store.access == .granted, let base = day.date(calendar: store.calendar) else { return }
+        let snapped = min(max(minutes, 0), 23 * 60) / 30 * 30
+        pressCount += 1
+        sheet = .new(base.addingTimeInterval(Double(snapped) * 60), allDay: false)
+    }
+
     private func weekdaySymbol(_ day: DayKey) -> String {
         day.weekday(calendar: store.calendar).map { DayKey.weekdaySymbolsJa[$0 - 1] } ?? ""
     }
@@ -141,10 +152,13 @@ private struct DayColumn: View {
     let hourHeight: CGFloat
     let compact: Bool
     let onTap: (EventItem) -> Void
+    /// Minutes from midnight at the pressed spot.
+    let onLongPress: (Int) -> Void
 
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
     @Environment(\.colorScheme) private var scheme
+    @State private var pressed = false
 
     var body: some View {
         let timed = store.events(on: day).filter { !$0.isAllDay && store.days(of: $0).start == store.days(of: $0).end }
@@ -154,6 +168,20 @@ private struct DayColumn: View {
         })
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
+                // Empty time: long press to add. Simultaneous, so scrolling keeps working.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.4)
+                            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
+                            .onChanged { value in
+                                guard case .second(true, let drag?) = value, !pressed else { return }
+                                pressed = true
+                                onLongPress(Int(drag.startLocation.y / hourHeight * 60))
+                            }
+                            .onEnded { _ in pressed = false }
+                    )
+                    .accessibilityHidden(true)
                 if isToday {
                     Rectangle().fill(Color.red)
                         .frame(height: 1.5)

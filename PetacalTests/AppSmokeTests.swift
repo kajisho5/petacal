@@ -32,6 +32,18 @@ import Testing
         #expect(ColorStore(defaults: defaults).calendarChoices == ["c1": 25])
     }
 
+    @Test func sampleStoreOffersCalendarsAndSkipsSaving() throws {
+        let item = EventItem(id: "e3|0", eventIdentifier: "e3", title: "打ち合わせ",
+                             start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 3600),
+                             isAllDay: false, calendarID: "c1", calendarTitle: "仕事",
+                             calendarColor: RGB(red: 0, green: 0.5, blue: 1), location: nil)
+        let store = CalendarStore(sample: [item])
+        #expect(store.writableCalendars.map(\.title) == ["仕事"])
+        #expect(store.defaultCalendarID == "c1")
+        let draft = QuickDraft(title: "新しい予定", start: Date(), end: Date(), isAllDay: true, calendarID: "c1")
+        #expect(try store.add(draft) == nil)   // sample stores never write to the device
+    }
+
     @Test func eventDaysAndMinutes() {
         let store = CalendarStore()
         let calendar = store.calendar

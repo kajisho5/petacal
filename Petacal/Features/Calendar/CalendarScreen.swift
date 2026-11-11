@@ -1,55 +1,39 @@
+import Combine
+import EventKit
 import PetaCore
 import SwiftUI
 
-/// S-01 カレンダー: the month grid and the selected day. Events and records are added in later steps.
-struct CalendarScreen: View {
-    @State private var shown = CalendarScreen.currentMonth()
-    @State private var selected = DayKey(date: Date(), calendar: .current)
-
-    private let calendar = Calendar.current
-
-    private static func currentMonth() -> MonthRef {
-        let today = DayKey(date: Date(), calendar: .current)
-        return MonthRef(year: today.year, month: today.month)
-    }
-
-    private var today: DayKey { DayKey(date: Date(), calendar: calendar) }
-    private var grid: MonthGrid { MonthGrid(year: shown.year, month: shown.month, calendar: calendar) }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                MonthGridView(grid: grid, today: today, selected: $selected)
-                DaySection(day: selected, isToday: selected == today, calendar: calendar)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
-        }
-        .navigationTitle(Text(verbatim: "\(shown.year)年\(shown.month)月"))
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("今日") { showToday() }
-            }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button("前の月", systemImage: "chevron.backward") { move(by: -1) }
-                Button("次の月", systemImage: "chevron.forward") { move(by: 1) }
-            }
+enum CalendarMode: String, CaseIterable, Identifiable {
+    case day, week, month
+    var id: String { rawValue }
+    var label: LocalizedStringKey {
+        switch self {
+        case .day: "日"
+        case .week: "週"
+        case .month: "月"
         }
     }
+}
 
-    private func showToday() {
-        let now = today
-        shown = MonthRef(year: now.year, month: now.month)
-        selected = now
-    }
+enum MonthPattern: String, CaseIterable, Identifiable {
+    case bars, dots
+    var id: String { rawValue }
+}
 
-    private func move(by offset: Int) {
-        let next = MonthGrid.shifted(year: shown.year, month: shown.month, by: offset)
-        shown = MonthRef(year: next.year, month: next.month)
-        // Keep a day selected in the month on screen: today if it is this month, otherwise the 1st.
-        let now = today
-        selected = (now.year == next.year && now.month == next.month)
-            ? now : DayKey(year: next.year, month: next.month, day: 1)
+/// What the calendar tab is presenting. One sheet at a time (no stacked modals).
+enum CalendarSheet: Identifiable {
+    case day(DayKey)
+    case event(EventItem)
+    case new(Date)
+    case edit(EventItem)
+
+    var id: String {
+        switch self {
+        case .day(let day): "day-\(day.year)-\(day.month)-\(day.day)"
+        case .event(let item): "event-\(item.id)"
+        case .new(let date): "new-\(date.timeIntervalSince1970)"
+        case .edit(let item): "edit-\(item.id)"
+        }
     }
 }
 
@@ -58,107 +42,191 @@ struct MonthRef: Equatable {
     var month: Int
 }
 
-private struct MonthGridView: View {
-    let grid: MonthGrid
-    let today: DayKey
-    @Binding var selected: DayKey
+/// S-01 カレンダー: day / week / month, with the events of the calendars registered on the device.
+struct CalendarScreen: View {
+    @Environment(CalendarStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("calendar.mode") private var modeRaw = CalendarMode.month.rawValue
+    @AppStorage("calendar.pattern") private var patternRaw = MonthPattern.bars.rawValue
+    @State private var focus = DayKey(date: Date(), calendar: .current)
+    @State private var sheet: CalendarSheet?
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+    private var calendar: Calendar { store.calendar }
+    private var today: DayKey { DayKey(date: Date(), calendar: calendar) }
+    private var mode: CalendarMode { CalendarMode(rawValue: modeRaw) ?? .month }
+    private var pattern: MonthPattern { MonthPattern(rawValue: patternRaw) ?? .bars }
+    private var month: MonthRef { MonthRef(year: focus.year, month: focus.month) }
+
+    private var title: String {
+        switch mode {
+        case .month: return "\(focus.year)年\(focus.month)月"
+        case .week:
+            let week = focus.week(calendar: calendar)
+            guard let first = week.first, let last = week.last else { return "" }
+            return first.month == last.month
+                ? "\(first.month)月\(first.day)日〜\(last.day)日"
+                : "\(first.month)月\(first.day)日〜\(last.month)月\(last.day)日"
+        case .day: return store.heading(focus, today: today)
+        }
+    }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(Array(grid.weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
-                Text(verbatim: symbol)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityHidden(true)
-            }
-            ForEach(Array(grid.weeks.joined().enumerated()), id: \.offset) { _, day in
-                if let day {
-                    DayCell(key: DayKey(year: grid.year, month: grid.month, day: day),
-                            today: today, selected: $selected)
-                } else {
-                    Color.clear.frame(height: 44)
+        VStack(spacing: 0) {
+            Picker("表示の切り替え", selection: $modeRaw) {
+                ForEach(CalendarMode.allCases) { mode in
+                    Text(mode.label).tag(mode.rawValue)
                 }
             }
-        }
-    }
-}
-
-private struct DayCell: View {
-    let key: DayKey
-    let today: DayKey
-    @Binding var selected: DayKey
-
-    private var isToday: Bool { key == today }
-    private var isSelected: Bool { key == selected }
-
-    var body: some View {
-        Button {
-            selected = key
-        } label: {
-            Text(verbatim: String(key.day))
-                .font(.body)
-                .fontWeight(isToday ? .semibold : .regular)
-                .foregroundStyle(isToday ? Color.white : Color.primary)
-                .frame(width: 36, height: 36)
-                .background {
-                    if isToday {
-                        Circle().fill(Color.accentColor)
-                    } else if isSelected {
-                        Circle().strokeBorder(Color.accentColor, lineWidth: 1.5)
-                    }
-                }
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(verbatim: accessibilityText))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private var accessibilityText: String {
-        var text = "\(key.month)月\(key.day)日"
-        if let weekday = key.weekday(calendar: .current) {
-            text += " \(DayKey.weekdaySymbolsJa[weekday - 1])曜日"
-        }
-        if isToday { text += " 今日" }
-        return text
-    }
-}
-
-private struct DaySection: View {
-    let day: DayKey
-    let isToday: Bool
-    let calendar: Calendar
-
-    private var heading: String {
-        var text = "\(day.month)月\(day.day)日"
-        if let weekday = day.weekday(calendar: calendar) {
-            text += "（\(DayKey.weekdaySymbolsJa[weekday - 1])）"
-        }
-        if isToday { text += "・今日" }
-        return text
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(verbatim: heading)
-                .font(.title3.weight(.semibold))
-                .accessibilityAddTraits(.isHeader)
-            ContentUnavailableView {
-                Label("この日はまだ何もありません", systemImage: "calendar")
-            } description: {
-                Text("予定と記録は、このあとのバージョンで追加できるようになります。")
-            }
-            .frame(maxWidth: .infinity)
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+
+            if store.access == .denied {
+                AccessDeniedBanner()
+            }
+            if store.access == .notDetermined {
+                AccessIntro { Task { await store.requestAccess() } }
+            } else {
+                content
+            }
         }
+        .navigationTitle(Text(verbatim: title))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("今日") { focus = today }
+            }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button("前へ", systemImage: "chevron.backward") { move(by: -1) }
+                Button("次へ", systemImage: "chevron.forward") { move(by: 1) }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("予定を追加", systemImage: "plus") { sheet = .new(newEventStart(on: focus)) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.access != .granted)
+            }
+        }
+        .sheet(item: $sheet) { current in
+            switch current {
+            case .day(let day):
+                DaySheet(day: day, sheet: $sheet)
+            case .event(let item):
+                NavigationStack { EventDetailView(item: item, sheet: $sheet, showsClose: true) }
+                    .presentationDetents([.medium, .large])
+            case .new(let date):
+                EventEditor(store: store.eventStore, event: nil, start: date) { store.reload(); sheet = nil }
+                    .ignoresSafeArea()
+            case .edit(let item):
+                EventEditor(store: store.eventStore, event: store.ekEvent(for: item), start: item.start) {
+                    store.reload()
+                    sheet = nil
+                }
+                    .ignoresSafeArea()
+            }
+        }
+        .task(id: month) { loadAround() }
+        .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged).receive(on: RunLoop.main)) { _ in
+            store.reload()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { store.refreshAccess() }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        Group {
+            switch mode {
+            case .month:
+                if pattern == .dots {
+                    MonthDotsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
+                                  today: today, focus: $focus, sheet: $sheet)
+                } else {
+                    MonthBarsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
+                                  today: today) { sheet = .day($0) }
+                }
+            case .week:
+                TimelineScreen(days: focus.week(calendar: calendar), today: today, focus: $focus, sheet: $sheet)
+            case .day:
+                TimelineScreen(days: [focus], today: today, focus: $focus, sheet: $sheet)
+            }
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 40).onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
+                move(by: value.translation.width < 0 ? 1 : -1)
+            }
+        )
+    }
+
+    /// Previous / next month, week or day. The buttons do the same as swiping sideways.
+    private func move(by step: Int) {
+        switch mode {
+        case .month:
+            let next = MonthGrid.shifted(year: focus.year, month: focus.month, by: step)
+            let now = today
+            focus = (now.year == next.year && now.month == next.month)
+                ? now : DayKey(year: next.year, month: next.month, day: 1)
+        case .week: focus = focus.adding(days: 7 * step, calendar: calendar)
+        case .day: focus = focus.adding(days: step, calendar: calendar)
+        }
+    }
+
+    /// Loads the month on screen plus the weeks around it (week view can reach into the next month).
+    private func loadAround() {
+        let first = DayKey(year: focus.year, month: focus.month, day: 1)
+        guard let start = first.date(calendar: calendar),
+              let from = calendar.date(byAdding: .day, value: -8, to: start),
+              let to = calendar.date(byAdding: .day, value: 40, to: start) else { return }
+        store.load(from: from, to: to)
+    }
+
+    /// New events start at the next full hour today, or at 9:00 on other days.
+    private func newEventStart(on day: DayKey) -> Date {
+        let base = day.date(calendar: calendar) ?? Date()
+        let hour = day == today ? min(calendar.component(.hour, from: Date()) + 1, 23) : 9
+        return calendar.date(byAdding: .hour, value: hour, to: base) ?? base
+    }
+}
+
+/// S-06: shown before the system dialog. One button.
+private struct AccessIntro: View {
+    let action: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("カレンダーの予定を表示します", systemImage: "calendar")
+        } description: {
+            Text("この iPhone に登録してあるカレンダー（iCloud、Google など）の予定を、ここに並べます。予定の内容が外に送られることはありません。")
+        } actions: {
+            Button("続ける", action: action)
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxHeight: .infinity)
+    }
+}
+
+private struct AccessDeniedBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("予定を表示するには、「設定」でカレンダーへのフルアクセスを許可してください。")
+                .font(.subheadline)
+            Button("設定を開く") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+        .padding(.bottom, 8)
     }
 }
 
 #Preview {
     NavigationStack { CalendarScreen() }
+        .environment(CalendarStore())
+        .environment(ColorStore())
 }

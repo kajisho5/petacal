@@ -958,10 +958,441 @@ def iphone_bulk(theme):
     return svg(w, h, t["bg"], "".join(b))
 
 
+# ---------- month with event bars (iPhone S-01, second look) ----------
+# Fictional events: (first day, last day, title, calendar). Multi-day events draw as one bar across days.
+SPANS = [(3, 3, "文化の日", "祝日"), (4, 6, "展示会の設営と本番", "仕事"), (9, 10, "出張（みなと市）", "仕事"),
+         (11, 11, "週次ミーティング", "仕事"), (11, 11, "そらまめ商店", "仕事"), (14, 14, "家族で買い出し", "家族"),
+         (18, 18, "打ち合わせ", "仕事"), (19, 21, "ソラマメーズ遠征", "プライベート"), (20, 20, "資料提出", "仕事"),
+         (25, 25, "懇親会", "プライベート"), (27, 29, "実家へ帰省", "家族"), (28, 28, "大掃除", "家族")]
+
+
+def cal_color(t, cal):
+    return t["red"] if cal == "祝日" else t["cal"][cal]
+
+
+def month_bars(t, x, y, cw, rh, bg, lanes=3, lane_h=21, num=15):
+    """Month grid that fills the screen: day number, up to `lanes` event bars, then the day's amount.
+    Bars carry the title (never colour alone); a bar that continues from the previous week has no cap."""
+    p = []
+    for i, d in enumerate("日月火水木金土"):
+        p.append(S(t, x + cw * (i + .5), y - 8, d, 12, "middle", bg=bg))
+    for r in range(6):
+        p.append(R(x, y + rh * r, cw * 7, 0.5, 0, t["sep"]))
+    for d in range(1, 31):
+        col, row = (d - 1) % 7, (d - 1) // 7
+        cx, cy = x + cw * col + cw / 2, y + rh * row + 14
+        if d == TODAY:
+            p.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="11" fill="{t["accent"]}"/>')
+            p.append(T(cx, cy + 5, str(d), 13, "#FFFFFF", 700, "middle", bg=t["accent"]))
+        else:
+            p.append(T(cx, cy + 5, str(d), 13, t["label"], 400, "middle", bg=bg))
+    for row in range(5):
+        first, last = row * 7 + 1, min(row * 7 + 7, 30)
+        segs = sorted([(max(a, first), min(b, last), title, cal, a >= first, b <= last)
+                       for a, b, title, cal in SPANS if a <= last and b >= first],
+                      key=lambda g: (g[0], -(g[1] - g[0])))
+        used = []      # per lane: last occupied day
+        hidden = {}    # day -> events that did not fit
+        for a, b, title, cal, starts, ends in segs:
+            lane = next((i for i, end in enumerate(used) if end < a), None)
+            if lane is None:
+                lane = len(used)
+                used.append(0)
+            used[lane] = b
+            if lane >= lanes:
+                for d in range(a, b + 1):
+                    hidden[d] = hidden.get(d, 0) + 1
+                continue
+            c = cal_color(t, cal)
+            bx = x + ((a - 1) % 7) * cw + (2 if starts else 0)
+            bw = (b - a + 1) * cw - (2 if starts else 0) - (2 if ends else 0)
+            by = y + rh * row + 28 + lane * lane_h
+            cb = mix(c, bg, 0.24)
+            p.append(R(bx, by, bw, lane_h - 3, 5, cb))
+            if starts:
+                p.append(R(bx, by, 3, lane_h - 3, 1.5, c))
+            chars = max(1, int((bw - 8) / (11.0 if a == b else 11.6)))
+            if len(title) <= chars:
+                label = title
+            elif a == b:
+                label = title[:chars]          # one-day bars are narrow: fill the width, no ellipsis
+            else:
+                label = title[:max(1, chars - 1)] + "…"
+            p.append(T(bx + 6, by + 13, label, 11, t["label"], 400, bg=cb))
+        for d in range(first, last + 1):
+            dx = x + ((d - 1) % 7) * cw
+            ly = y + rh * row + 28 + lanes * lane_h
+            if d in RECORDS:
+                p.append(R(dx + 5, ly + 5, 5, 5, 1, t["sec"]))
+                p.append(amt(t, dx + cw - 4, ly + 12, RECORDS[d][2], 11, "end", bg=bg, unit=False))
+            elif d in hidden:
+                p.append(S(t, dx + cw / 2, ly + 12, f"ほか{hidden[d]}件", 11, "middle", bg=bg))
+    return "".join(p)
+
+
+def part_sheet(t, theme, w, h, top, dim=0.18):
+    """A resizable (medium) sheet: grabber at the top, content below."""
+    return [R(0, 0, w, h, 0, "#000000", f' fill-opacity="{dim if theme == "light" else dim * 2}"'),
+            f'<path d="M0 {top+38}a38 38 0 0 1 38 -38h{w-76}a38 38 0 0 1 38 38v{h-top-38}h-{w}z" fill="{t["sheet"]}"/>',
+            R(w / 2 - 18, top + 8, 36, 5, 2.5, t["sec"], ' fill-opacity="0.4"')]
+
+
+def cal_header(t, w, title, active):
+    """Top of the calendar tab: 今日, 候補日, ＋, the title, this month's totals and the 日/週/月 switch."""
+    b = iphone_top(t, w, title=title, sub="")
+    b.append(S(t, w - 20, 134, "収支 +6,600円", 13, "end"))
+    b.append(S(t, w - 20, 152, "推し活 12,100円", 13, "end"))
+    b.append(seg(t, 16, 164, w - 32, ["日", "週", "月"], active, mix(t["sec"], t["bg"], 0.10)))
+    return b
+
+
+def timeline(t, x, y, w, hours, hh, bg):
+    """Hour lines with labels in a 36pt gutter."""
+    p = []
+    for i, hour in enumerate(hours):
+        yy = y + i * hh
+        p.append(S(t, x + 30, yy + 4, f"{hour}:00", 11, "end", bg=bg))
+        p.append(R(x + 36, yy, w - 36, 0.5, 0, t["sep"]))
+    return "".join(p)
+
+
+def block(t, x, y, w, h, title, cal, bg, sub=None, size=11):
+    c = cal_color(t, cal)
+    cb = mix(c, bg, 0.26)
+    p = [R(x, y, w, h, 6, cb), R(x, y, 3, h, 1.5, c)]
+    chars = max(1, int((w - 10) / (size + 0.6)))
+    lines = [title[i:i + chars] for i in range(0, len(title), chars)][:max(1, int((h - 4) / (size + 4)))]
+    for i, line in enumerate(lines):
+        p.append(T(x + 7, y + size + 4 + i * (size + 4), line, size, t["label"], 600 if size > 11 else 400, bg=cb))
+    if sub and h >= (size + 4) * (len(lines) + 1) + 4:
+        p.append(S(t, x + 7, y + size + 4 + len(lines) * (size + 4), sub, 13, bg=cb))
+    return "".join(p)
+
+
+def iphone_week(theme):
+    """S-01 週: seven days with all-day bars, each day's amount, and timed blocks."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    bg = t["bg"]
+    b = cal_header(t, w, "2026年11月", 1)
+    gx, cw = 44, (w - 44 - 8) / 7
+    for i, d in enumerate(range(8, 15)):
+        cx = gx + cw * (i + .5)
+        b.append(S(t, cx, 222, "日月火水木金土"[i], 12, "middle"))
+        if d == TODAY:
+            b.append(f'<circle cx="{cx:g}" cy="242" r="13" fill="{t["accent"]}"/>')
+            b.append(T(cx, 248, str(d), 17, "#FFFFFF", 600, "middle", bg=t["accent"]))
+        else:
+            b.append(T(cx, 248, str(d), 17, t["label"], 400, "middle"))
+        if d in RECORDS:
+            b.append(amt(t, cx, 272, RECORDS[d][2], 11, "middle", bg=bg, unit=False))
+    b.append(S(t, 38, 296, "終日", 11, "end"))
+    b.append(block(t, gx + cw + 2, 282, cw * 2 - 4, 20, "出張（みなと市）", "仕事", bg))
+    b.append(block(t, gx + cw * 6 + 2, 282, cw - 4, 20, "家族で買い出し", "家族", bg))
+    y0, hh = 322, 44
+    b.append(timeline(t, 8, y0, w - 16, range(9, 20), hh, bg))
+    for c in range(1, 7):
+        b.append(R(gx + cw * c, y0, 0.5, hh * 10, 0, t["sep"]))
+    def at(col, start, end, title, cal):
+        return block(t, gx + cw * col + 2, y0 + (start - 9) * hh + 1, cw - 4, (end - start) * hh - 2, title, cal, bg)
+    b.append(at(3, 10, 11, "週次ミーティング", "仕事"))
+    b.append(at(3, 13.5, 14.5, "そらまめ商店 打ち合わせ", "仕事"))
+    b.append(at(4, 15, 16.5, "企画レビュー", "仕事"))
+    b.append(at(5, 11, 12, "面談", "仕事"))
+    b.append(at(2, 16, 18, "移動", "仕事"))
+    # now line at 9:41
+    ny = y0 + (9 + 41 / 60 - 9) * hh
+    b.append(R(gx + cw * 3, ny - 1, cw, 2, 1, t["red"]) + f'<circle cx="{gx + cw * 3:g}" cy="{ny:g}" r="4" fill="{t["red"]}"/>')
+    b.append(tab_bar(w, h, t))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+def iphone_dayview(theme):
+    """S-01 日: one day. Records on top, then the timeline."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    bg = t["bg"]
+    b = cal_header(t, w, "11月11日（水）", 0)
+    b.append(S(t, 24, 228, "記録", 13))
+    b.append(R(16, 236, w - 32, 68, 22, t["cell"]))
+    rec_row(t, b, 16, 236, w - 32, 11, t["cell"])
+    y0, hh = 330, 44
+    b.append(timeline(t, 8, y0, w - 16, range(9, 20), hh, bg))
+    def at(start, end, title, cal, sub):
+        return block(t, 48, y0 + (start - 9) * hh + 1, w - 48 - 16, (end - start) * hh - 2, title, cal, bg, sub, 15)
+    b.append(at(10, 11, "週次ミーティング", "仕事", "オンライン"))
+    b.append(at(13.5, 14.5, "そらまめ商店 打ち合わせ", "仕事", "みどり台ビル 3階"))
+    ny = y0 + (41 / 60) * hh
+    b.append(R(44, ny - 1, w - 60, 2, 1, t["red"]) + f'<circle cx="44" cy="{ny:g}" r="4" fill="{t["red"]}"/>')
+    b.append(tab_bar(w, h, t))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+def iphone_month(theme, state="month"):
+    """S-01 月 with event bars. state: month / day (the day's sheet) / event (S-02 as a sheet)."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    b = cal_header(t, w, "2026年11月", 2)
+    b.append(month_bars(t, 8, 228, (w - 16) / 7, 108, t["bg"]))
+    if state == "month":
+        b.append(tab_bar(w, h, t))
+        return svg(w, h, t["bg"], "".join(b))
+    sh, fd = t["sheet"], t["field"]
+    if state == "day":
+        top = 468
+        b += part_sheet(t, theme, w, h, top)
+        b.append(T(24, top + 56, "11月11日（水）・今日", 20, t["label"], 600, bg=sh))
+        b.append(gbtn(t, w - 46, top + 48, "plus", "#FFFFFF", fill=t["accent"], label="この日に追加"))
+        b.append(agenda(t, 16, top + 84, w - 32, fd))
+        b.append(S(t, 24, top + 316, "予定をタップすると内容が開きます。", 13, bg=sh))
+    else:
+        top = 520
+        b += part_sheet(t, theme, w, h, top)
+        c = t["cal"]["プライベート"]
+        b.append(f'<circle cx="34" cy="{top+56}" r="7" fill="{c}"/>')
+        b.append(T(52, top + 64, "ソラマメーズ遠征", 22, t["label"], 700, bg=sh))
+        b.append(T(52, top + 96, "11月19日（木）〜 11月21日（土）", 17, t["label"], 400, bg=sh))
+        b.append(S(t, 52, top + 122, "終日・プライベート", 15, bg=sh))
+        b.append(R(52, top + 144, w - 76, .5, 0, t["sep"]))
+        b.append(ico("cal", 34, top + 174, t["sec"], 1.8, .8))
+        b.append(T(52, top + 180, "前日の 9:00 に通知", 17, t["label"], 400, bg=sh))
+        b.append(ico("note", 34, top + 218, t["sec"], 1.8, .8))
+        b.append(T(52, top + 224, "この期間の記録 2件", 17, t["label"], 400, bg=sh))
+        b.append(ico("chev", w - 34, top + 218, t["sec"], 2, .8))
+        b.append(R(24, top + 262, (w - 60) / 2, 50, 25, fd))
+        b.append(T(24 + (w - 60) / 4, top + 294, "編集", 17, t["label"], 400, "middle", bg=fd))
+        b.append(R(36 + (w - 60) / 2, top + 262, (w - 60) / 2, 50, 25, fd))
+        b.append(T(36 + (w - 60) * 3 / 4, top + 294, "予定を削除", 17, t["red"], 400, "middle", bg=fd))
+    b.append(home_ind(w, h, t))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+# ---------- month display patterns (設定 → カレンダーの表示) ----------
+PHOTO_DAYS = {3: 0, 7: 1, 14: 2, 19: 3, 20: 0, 21: 1, 25: 2}
+
+
+def month_cells(t, x, y, cw, rh, bg, kind):
+    """Month grid for the 金額 and 写真 patterns: day number, small marks for events, then the main item."""
+    p = []
+    for i, d in enumerate("日月火水木金土"):
+        p.append(S(t, x + cw * (i + .5), y - 8, d, 12, "middle", bg=bg))
+    for r in range(6):
+        p.append(R(x, y + rh * r, cw * 7, 0.5, 0, t["sep"]))
+    busy = {}
+    for a, b_, _, cal in SPANS:
+        for d in range(a, b_ + 1):
+            busy.setdefault(d, []).append(cal)
+    for d in range(1, 31):
+        col, row = (d - 1) % 7, (d - 1) // 7
+        cx, cy = x + cw * col + cw / 2, y + rh * row + 14
+        if d == TODAY:
+            p.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="11" fill="{t["accent"]}"/>')
+            p.append(T(cx, cy + 5, str(d), 13, "#FFFFFF", 700, "middle", bg=t["accent"]))
+        else:
+            p.append(T(cx, cy + 5, str(d), 13, t["label"], 400, "middle", bg=bg))
+        cals = busy.get(d, [])[:3]
+        for k, cal in enumerate(cals):
+            p.append(f'<circle cx="{cx + (k - (len(cals) - 1) / 2) * 8:g}" cy="{cy + 18:g}" r="2.5" fill="{cal_color(t, cal)}"/>')
+        top = y + rh * row + 40
+        if kind == "amount" and d in RECORDS:
+            n = RECORDS[d][2]
+            cb = mix(t["plus"] if n > 0 else t["minus"], bg, 0.12)
+            p.append(R(x + cw * col + 3, top, cw - 6, 44, 10, cb))
+            p.append(T(cx, top + 19, "+" if n > 0 else "−", 13, t["plus"] if n > 0 else t["minus"], 700, "middle", bg=cb))
+            p.append(T(cx, top + 36, f"{abs(n):,}", 13, t["label"], 600, "middle", bg=cb))
+        if kind == "photo":
+            if d in PHOTO_DAYS:
+                p.append(thumb(t, x + cw * col + 4, top - 4, cw - 8, PHOTO_DAYS[d], 8))
+            if d in RECORDS and d not in PHOTO_DAYS:
+                p.append(amt(t, cx, top + 20, RECORDS[d][2], 11, "middle", bg=bg, unit=False))
+    return "".join(p)
+
+
+def iphone_pattern(theme, kind):
+    """S-01 月 in the other display patterns: dots (点と一覧), amount (金額), photo (写真)."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    b = cal_header(t, w, "2026年11月", 2)
+    if kind == "dots":
+        b.append(month_dots(t, 16, 230, (w - 32) / 7, 59, t["bg"]))
+        b.append(T(20, 546, "11月11日（水）・今日", 20, t["label"], 600))
+        b.append(agenda(t, 16, 558, w - 32, t["cell"]))
+    else:
+        b.append(month_cells(t, 8, 228, (w - 16) / 7, 108, t["bg"], kind))
+    b.append(tab_bar(w, h, t))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+def mini(t, x, y, w, h, kind, bg):
+    """Small schematic of a pattern for the picker (shapes only, no text)."""
+    p = [R(x, y, w, h, 12, bg)]
+    cw, rh = (w - 16) / 7, (h - 16) / 3
+    for r in range(3):
+        for c in range(7):
+            cx, cy = x + 8 + cw * (c + .5), y + 8 + rh * r + 7
+            p.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="2" fill="{t["sec"]}" fill-opacity="0.5"/>')
+            mark = (r * 7 + c) % 4
+            yy = y + 8 + rh * r + 13
+            if kind == "bars" and mark in (0, 1):
+                p.append(R(x + 8 + cw * c + 1, yy, cw * (2 if mark == 0 and c < 6 else 1) - 2, 5, 2, list(t["cal"].values())[(r + c) % 3]))
+            if kind == "dots" and mark != 2:
+                p.append(f'<circle cx="{cx:g}" cy="{yy + 3:g}" r="2" fill="{list(t["cal"].values())[(r + c) % 3]}"/>')
+            if kind == "amount" and mark in (0, 3):
+                p.append(R(x + 8 + cw * c + 2, yy, cw - 4, rh - 18, 3, t["plus"] if mark == 0 else t["minus"], ' fill-opacity="0.55"'))
+            if kind == "photo" and mark in (1, 3):
+                p.append(R(x + 8 + cw * c + 2, yy, cw - 4, rh - 18, 3, t["ph"][(r + c) % 4]))
+    return "".join(p)
+
+
+def iphone_pattern_picker(theme):
+    """S-05 設定 → カレンダーの表示: choose how the month looks."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    c = t["cell"]
+    b = [status_bar(w, t), gbtn(t, 38, 84, "back", label="設定に戻る"), T(20, 148, "カレンダーの表示", 28, t["label"], 700),
+         S(t, 20, 174, "月の画面の見え方を選べます。いつでも変えられます。", 15)]
+    opts = [("bars", "帯（標準）", "予定の題名が見える", False, True), ("dots", "点と一覧", "月は小さく、下に一覧", False, False),
+            ("amount", "金額", "その日の収支を大きく", True, False), ("photo", "写真", "記録の写真を並べる", True, False)]
+    tw, th = (w - 48) / 2, 236
+    for i, (kind, name, sub, pro, on) in enumerate(opts):
+        x, y = 16 + (i % 2) * (tw + 16), 196 + (i // 2) * (th + 16)
+        st = f' stroke="{t["accent"]}" stroke-width="2"' if on else ""
+        b.append(R(x, y, tw, th, 24, c, st))
+        b.append(mini(t, x + 12, y + 12, tw - 24, 132, kind, t["field"] if theme == "light" else "#2C2C2E"))
+        b.append(T(x + 16, y + 172, name, 17, t["label"], 600, bg=c))
+        b.append(S(t, x + 16, y + 194, sub, 13, bg=c))
+        if on:
+            b.append(f'<g aria-label="選択中"><circle cx="{x + tw - 26}" cy="{y + 212}" r="11" fill="{t["accent"]}"/>'
+                     + ico("check", x + tw - 26, y + 212, "#FFFFFF", 2.4, .6) + "</g>")
+        else:
+            b.append(f'<circle cx="{x + tw - 26}" cy="{y + 212}" r="10" fill="none" stroke="{t["sec"]}" stroke-opacity="0.6" stroke-width="1.5"/>')
+        if pro:
+            b.append(R(x + 16, y + 202, 40, 20, 10, t["accent"]))
+            b.append(T(x + 36, y + 216, "Pro", 12, "#FFFFFF", 700, "middle", bg=t["accent"]))
+    b.append(S(t, 20, 722, "「日」「週」の画面は、どのパターンでも同じです。", 13))
+    b.append(tab_bar(w, h, t, active=3))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+# ---------- colour presets (設定 → 色分け) ----------
+# 10 families x 5 tones = 50 presets. Each has a name (read by VoiceOver) and its own light/dark value.
+import colorsys
+
+FAMILIES = [("赤", 355, 1.0), ("オレンジ", 25, 1.0), ("黄", 46, 1.0), ("緑", 135, 0.85), ("青緑", 176, 0.9),
+            ("青", 212, 1.0), ("紫", 268, 0.85), ("ピンク", 328, 0.95), ("茶", 24, 0.5), ("グレー", 215, 0.1)]
+TONES = [("あざやか", .78, .48, .56), ("明るい", .85, .62, .68), ("うすい", .70, .78, .80), ("こい", .75, .33, .44), ("くすみ", .32, .52, .58)]
+
+
+def preset(fi, ti, theme):
+    name, hue, k = FAMILIES[fi]
+    tone, sat, l_light, l_dark = TONES[ti]
+    if name == "茶":
+        l_light, l_dark = l_light * 0.85, l_dark * 0.9
+    if name == "グレー" and tone == "くすみ":
+        hue, k = 40, 0.4      # warm grey
+    r, g, bl = colorsys.hls_to_rgb(hue / 360, l_light if theme == "light" else l_dark, sat * k)
+    return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(bl * 255))
+
+
+def lum(c):
+    v = [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    v = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in v]
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]
+
+
+# what the sample user has chosen: (group, name, family index, tone index) — None = the calendar's own colour
+COLOR_ROWS = [("カレンダー", "仕事", None), ("カレンダー", "プライベート", None), ("カレンダー", "家族", None),
+              ("記録の種類", "推し活", (7, 0)), ("記録の種類", "収支・FX", (4, 3)), ("記録の種類", "収支・競馬", (3, 4)),
+              ("記録の種類", "日々の記録", (9, 0))]
+
+
+def chevron(x, y, c):
+    return f'<path d="M{x} {y-6}l6 6l-6 6" fill="none" stroke="{c}" stroke-opacity="0.5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+
+
+def iphone_colors(theme):
+    """S-05 設定 → 色分け: one colour per calendar and per record type."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    c = t["cell"]
+    b = [status_bar(w, t), gbtn(t, 38, 84, "back", label="設定に戻る"), T(20, 148, "色分け", 28, t["label"], 700),
+         S(t, 20, 174, "50色から選べます。いつでも変えられます。", 15)]
+    y = 196
+    for grp in ("カレンダー", "記録の種類"):
+        rows = [r for r in COLOR_ROWS if r[0] == grp]
+        b.append(S(t, 32, y + 16, grp, 13))
+        y += 26
+        b.append(R(16, y, w - 32, 52 * len(rows), 24, c))
+        for i, (_, name, ch) in enumerate(rows):
+            cy = y + 26 + i * 52
+            col = preset(ch[0], ch[1], theme) if ch else t["cal"][name]
+            cname = f"{FAMILIES[ch[0]][0]}・{TONES[ch[1]][0]}" if ch else "元の色"
+            b.append(f'<circle cx="46" cy="{cy}" r="12" fill="{col}"/>')
+            b.append(T(70, cy + 6, name, 17, t["label"], bg=c))
+            b.append(S(t, w - 56, cy + 5, cname, 15, "end", bg=c))
+            b.append(chevron(w - 44, cy, t["sec"]))
+            if i:
+                b.append(f'<line x1="70" y1="{cy-26}" x2="{w-16}" y2="{cy-26}" stroke="{t["sep"]}" stroke-width="0.5"/>')
+        y += 52 * len(rows) + 14
+    for i, line in enumerate(["予定を1件だけ別の色にするときは、予定を開いて「色」を", "選びます。", "ここで選んだ色は、このアプリの中だけで使います。",
+                              "Google カレンダーなど、元のカレンダーの色は", "変わりません。"]):
+        b.append(S(t, 32, y + 14 + i * 18 + (6 if i >= 2 else 0), line, 13))
+    b.append(tab_bar(w, h, t, active=3))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+def iphone_color_pick(theme, sel=(7, 0), target="推し活"):
+    """S-05 色を選ぶシート: 10 families x 5 tones."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    sh = t["sheet"]
+    b, sy = sheet_base(t, theme, w, h, f"「{target}」の色")
+    b[-1] = gbtn(t, w - 46, sy + 48, "check", "#FFFFFF", fill=t["accent"], label="完了")
+    x0, step = 126, 54
+    for ti, (tone, *_x) in enumerate(TONES):
+        b.append(S(t, x0 + ti * step, sy + 108, tone, 12, "middle", bg=sh))
+    for fi, (fam, *_x) in enumerate(FAMILIES):
+        cy = sy + 142 + fi * 50
+        b.append(T(24, cy + 5, fam, 15, t["label"], bg=sh))
+        for ti, (tone, *_y) in enumerate(TONES):
+            col = preset(fi, ti, theme)
+            cx = x0 + ti * step
+            on = (fi, ti) == sel
+            g = f'<g aria-label="{fam}・{tone}{"（選択中）" if on else ""}"><circle cx="{cx}" cy="{cy}" r="17" fill="{col}"/>'
+            if on:
+                g += f'<circle cx="{cx}" cy="{cy}" r="21.5" fill="none" stroke="{t["label"]}" stroke-width="2"/>'
+                g += ico("check", cx, cy, "#000000" if lum(col) > 0.36 else "#FFFFFF", 2.6, .7)
+            b.append(g + "</g>")
+    # preview of how it looks in the month, then the reset row
+    py = sy + 142 + 10 * 50 + 4
+    col = preset(sel[0], sel[1], theme)
+    b.append(S(t, 24, py + 16, "見本", 13, bg=sh))
+    fill = mix(col, sh, 0.35)
+    b.append(R(70, py, 190, 24, 5, fill))
+    b.append(R(70, py, 3, 24, 1.5, col))
+    b.append(T(80, py + 17, "ソラマメーズ 新譜を購入", 13, t["label"], 500, bg=fill))
+    b.append(S(t, w - 24, py + 16, f"{FAMILIES[sel[0]][0]}・{TONES[sel[1]][0]}", 13, "end", bg=sh))
+    by = py + 44
+    b.append(R(16, by, w - 32, 50, 25, t["field"]))
+    b.append(T(w / 2, by + 31, "最初の色に戻す", 17, t["accent_text"], 500, "middle", bg=t["field"]))
+    b.append(home_ind(w, h, t))
+    return svg(w, h, t["bg"], "".join(b))
+
+
 files = {}
 for th in ("light", "dark"):
     files.update({
-        f"iphone-S-01-{th}.svg": iphone_main(th),
+        f"iphone-S-01-{th}.svg": iphone_month(th),
+        f"iphone-S-01-day-{th}.svg": iphone_month(th, "day"),
+        f"iphone-S-02-{th}.svg": iphone_month(th, "event"),
+        f"iphone-S-01-week-{th}.svg": iphone_week(th),
+        f"iphone-S-01-dots-{th}.svg": iphone_pattern(th, "dots"),
+        f"iphone-S-01-amount-{th}.svg": iphone_pattern(th, "amount"),
+        f"iphone-S-01-photo-{th}.svg": iphone_pattern(th, "photo"),
+        f"iphone-S-05-patterns-{th}.svg": iphone_pattern_picker(th),
+        f"iphone-S-05-colors-{th}.svg": iphone_colors(th),
+        f"iphone-S-05-color-pick-{th}.svg": iphone_color_pick(th),
+        f"iphone-S-01-dayview-{th}.svg": iphone_dayview(th),
         f"iphone-S-01-empty-{th}.svg": iphone_main(th, empty=True),
         f"iphone-S-01-ax5-{th}.svg": iphone_ax5(th),
         f"iphone-S-03-{th}.svg": iphone_capture(th, "result"),

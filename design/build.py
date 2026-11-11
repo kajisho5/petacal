@@ -1379,6 +1379,47 @@ def iphone_color_pick(theme, sel=(7, 0), target="推し活"):
     return svg(w, h, t["bg"], "".join(b))
 
 
+def iphone_quick_add(theme):
+    """S-15 新しい予定（かんたん入力）: opens from a long press on a day or a time, and from ＋."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    sh, f = t["sheet"], t["field"]
+    b, sy = sheet_base(t, theme, w, h, "新しい予定")
+    b[-1] = gbtn(t, w - 46, sy + 48, "check", "#FFFFFF", fill=t["accent"], label="保存")
+    # title field (typed text, caret)
+    b.append(R(16, sy + 88, w - 32, 56, 16, f))
+    b.append(T(32, sy + 123, "明日15時 打ち合わせ", 20, t["label"], 500, bg=f))
+    b.append(R(222, sy + 102, 2, 28, 1, t["accent"]))
+    b.append(S(t, 32, sy + 166, "「明日15時」を日時として読み取りました。", 13, bg=sh))
+    b.append(S(t, 32, sy + 184, "題名は「打ち合わせ」になります。", 13, bg=sh))
+    # rows
+    y = sy + 200
+    rows = [("開始", "11月12日（木） 15:00"), ("終了", "11月12日（木） 16:00"), ("終日", None), ("カレンダー", "仕事"), ("色", "カレンダーの色")]
+    b.append(R(16, y, w - 32, 48 * len(rows), 20, f))
+    for i, (name, val) in enumerate(rows):
+        cy = y + 24 + i * 48
+        b.append(T(32, cy + 6, name, 17, t["label"], bg=f))
+        if val is None:
+            b.append(switch(t, w - 32 - 51, cy - 15.5, on=False))
+        else:
+            dot = name in ("カレンダー", "色")
+            b.append(T(w - 32 - (22 if dot else 0), cy + 6, val, 17, t["accent_text"] if not dot else t["label"], anchor="end", bg=f))
+            if dot:
+                b.append(chevron(w - 40, cy, t["sec"]))
+                tw = len(val) * 17
+                b.append(f'<circle cx="{w - 54 - tw - 14}" cy="{cy}" r="7" fill="{t["cal"]["仕事"]}"/>')
+        if i:
+            b.append(f'<line x1="32" y1="{cy-24}" x2="{w-16}" y2="{cy-24}" stroke="{t["sep"]}" stroke-width="0.5"/>')
+    by = y + 48 * len(rows) + 14
+    b.append(R(16, by, w - 32, 44, 22, f))
+    b.append(T(w / 2, by + 28, "くわしく設定（場所・くり返し・通知）", 15, t["accent_text"], 500, "middle", bg=f))
+    ky = h - 300
+    b.append(R(0, ky, w, 300, 0, t["kb"]))
+    b.append(T(w / 2, ky + 150, "（システムのキーボード）", 15, t["label"], 400, "middle", bg=t["kb"]))
+    b.append(home_ind(w, h, t))
+    return svg(w, h, t["bg"], "".join(b))
+
+
 files = {}
 for th in ("light", "dark"):
     files.update({
@@ -1391,6 +1432,7 @@ for th in ("light", "dark"):
         f"iphone-S-01-photo-{th}.svg": iphone_pattern(th, "photo"),
         f"iphone-S-05-patterns-{th}.svg": iphone_pattern_picker(th),
         f"iphone-S-05-colors-{th}.svg": iphone_colors(th),
+        f"iphone-S-15-quickadd-{th}.svg": iphone_quick_add(th),
         f"iphone-S-05-color-pick-{th}.svg": iphone_color_pick(th),
         f"iphone-S-01-dayview-{th}.svg": iphone_dayview(th),
         f"iphone-S-01-empty-{th}.svg": iphone_main(th, empty=True),

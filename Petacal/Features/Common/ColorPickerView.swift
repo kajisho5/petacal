@@ -53,7 +53,7 @@ struct ColorPickerView: View {
 
                 Button(resetLabel) { selection = nil }
                     .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(Color(uiColor: .tertiarySystemFill), in: Capsule())
+                    .background(Color.fillBackground, in: Capsule())
                     .disabled(selection == nil)
             }
             .padding()

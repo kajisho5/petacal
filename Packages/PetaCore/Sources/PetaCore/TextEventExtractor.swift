@@ -28,12 +28,19 @@ public enum TextEventExtractor {
     private static let edge = CharacterSet(charactersIn: " 、,：:・-—「」（）()　")
 
     public static func extract(_ rawText: String, now: Date, calendar: Calendar) -> [ExtractedEvent] {
+        extractDetailed(rawText, now: now, calendar: calendar).map(\.event)
+    }
+
+    /// The same events, each with the sentence it was found in (the AI step reads that sentence again).
+    public static func extractDetailed(_ rawText: String, now: Date, calendar: Calendar)
+        -> [(event: ExtractedEvent, sentence: String)] {
         let text = JapaneseDateParser.normalize(rawText)
-        var events: [ExtractedEvent] = []
+        var events: [(event: ExtractedEvent, sentence: String)] = []
         for sentence in text.split(whereSeparator: { breaks.contains($0) }) {
             let parsed = QuickAddParser.parse(String(sentence), now: now, calendar: calendar)
             guard let day = parsed.day else { continue }
-            events.append(ExtractedEvent(title: clean(parsed.title), day: day, start: parsed.start, end: parsed.end))
+            events.append((ExtractedEvent(title: clean(parsed.title), day: day, start: parsed.start, end: parsed.end),
+                           String(sentence).trimmingCharacters(in: .whitespaces)))
         }
         return events
     }

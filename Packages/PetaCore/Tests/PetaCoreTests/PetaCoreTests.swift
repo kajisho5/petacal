@@ -488,3 +488,68 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(TextEventExtractor.extract("20日です。", now: now, calendar: jst).first?.title == "予定")
     }
 }
+
+@Suite struct PaneSplitTests {
+    @Test func narrowWindowsStayOneColumn() {
+        #expect(PaneSplit.compute(width: 402) == nil)
+        #expect(PaneSplit.compute(width: 699) == nil)
+    }
+
+    @Test func wideWindowsGetTheDayListOnTheTrailingSide() throws {
+        let landscape = try #require(PaneSplit.compute(width: 1194))
+        #expect(landscape.trailing == 1194 * 0.34)
+        #expect(abs(landscape.leading + landscape.gap + landscape.trailing - 1194) < 0.001)
+        #expect(!landscape.compactMonth)
+        let portrait = try #require(PaneSplit.compute(width: 834))
+        #expect(portrait.trailing == 320)
+        #expect(portrait.compactMonth)
+        let huge = try #require(PaneSplit.compute(width: 2000))
+        #expect(huge.trailing == 440)
+    }
+
+    @Test func foldSplitsInHalvesAndKeepsClearOfIt() throws {
+        // Fully open: the fold is reported but inactive.
+        let open = try #require(PaneSplit.compute(width: 867, fold: FoldRegion(minX: 455, maxX: 495, isActive: false)))
+        #expect(open.gap == 16)
+        #expect(open.leading == 467)
+        #expect(open.trailing == 384)
+        #expect(open.compactMonth)
+        // Partly folded: nothing between minX and maxX.
+        let folded = try #require(PaneSplit.compute(width: 867, fold: FoldRegion(minX: 455, maxX: 495, isActive: true)))
+        #expect(folded.leading == 455)
+        #expect(folded.gap == 40)
+        #expect(folded.trailing == 372)
+        // A fold outside the view is ignored.
+        let outside = try #require(PaneSplit.compute(width: 867, fold: FoldRegion(minX: 900, maxX: 940, isActive: true)))
+        #expect(outside.gap == 16)
+        #expect(outside.trailing == 320)
+    }
+}
+
+@Suite struct AIReplyTests {
+    private let text = "来週の打ち合わせ、18日(水)15時からでお願いします。場所は会議室Bです。"
+
+    @Test func readsTheTwoLines() {
+        #expect(AIReply.parse("題名: 打ち合わせ\n場所: 会議室B") == AIReply(title: "打ち合わせ", place: "会議室B"))
+        #expect(AIReply.parse("- 題名：「打ち合わせ」\n- 場所：なし") == AIReply(title: "打ち合わせ", place: nil))
+        #expect(AIReply.parse("わかりました。") == AIReply())
+    }
+
+    @Test func keepsOnlyWhatCanBeTrusted() {
+        let good = AIReply.checked(AIReply(title: "打ち合わせ", place: "会議室B"), fallbackTitle: "来週の打ち合わせ", fullText: text)
+        #expect(good.title == "打ち合わせ")
+        #expect(good.place == "会議室B")
+        // A place that is not written in the text is dropped; an empty or overlong title falls back.
+        let invented = AIReply.checked(AIReply(title: nil, place: "そらまめホール"), fallbackTitle: "来週の打ち合わせ", fullText: text)
+        #expect(invented.title == "来週の打ち合わせ")
+        #expect(invented.place == "")
+        let long = AIReply.checked(AIReply(title: String(repeating: "あ", count: 41)), fallbackTitle: "予定", fullText: text)
+        #expect(long.title == "予定")
+    }
+
+    @Test func extractorKeepsTheSentence() {
+        let found = TextEventExtractor.extractDetailed(text, now: at(2026, 11, 11, 9, 41), calendar: jst)
+        #expect(found.count == 1)
+        #expect(found[0].sentence.contains("18日"))
+    }
+}

@@ -97,7 +97,12 @@ import UIKit
         try await render(name, style: style, view: AnyView(NavigationStack { CalendarScreen() }))
     }
 
-    private func render(_ name: String, style: UIUserInterfaceStyle, view: AnyView) async throws {
+    private static let phone = CGSize(width: 402, height: 874)
+
+    /// `wide` draws the view the way a wide screen would (regular width), at the given size.
+    /// The bars around it are not the real ones there: see `deviceRoot` for those.
+    private func render(_ name: String, style: UIUserInterfaceStyle, size: CGSize = ScreenshotTests.phone,
+                        wide: Bool = false, view: AnyView) async throws {
         let defaults = UserDefaults(suiteName: "petacal-tests-shots")!
         defaults.removePersistentDomain(forName: "petacal-tests-shots")
         let container = try ScreenshotTests.sampleContainer()
@@ -106,11 +111,18 @@ import UIKit
             .environment(ColorStore(defaults: defaults))
             .environment(LockGate(defaults: defaults))
             .environment(UndoCenter())
+            .environment(AppRouter())
             .modelContainer(container)
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
-        let frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        // A zero size means: whatever the device's own scene gives (real bars, real size classes).
+        let frame = size == .zero ? (scene?.coordinateSpace.bounds ?? CGRect(origin: .zero, size: ScreenshotTests.phone))
+            : CGRect(origin: .zero, size: size)
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: frame)
         window.frame = frame
+        if wide {
+            window.traitOverrides.horizontalSizeClass = .regular
+            window.traitOverrides.verticalSizeClass = .regular
+        }
         window.overrideUserInterfaceStyle = style
         window.rootViewController = UIHostingController(rootView: root)
         window.makeKeyAndVisible()
@@ -123,6 +135,34 @@ import UIKit
         try data.write(to: ScreenshotTests.folder.appendingPathComponent("\(name).png"))
         window.isHidden = true
         #expect(data.count > 10_000)
+    }
+
+    /// iPad and the inner display of iPhone Duo: the month with the day's list beside it, records and stats in columns.
+    @Test func wideScreens() async throws {
+        UserDefaults.standard.set(CalendarMode.month.rawValue, forKey: "calendar.mode")
+        UserDefaults.standard.set(MonthPattern.bars.rawValue, forKey: "calendar.pattern")
+        let calendar = AnyView(NavigationStack { CalendarScreen() })
+        try await render("wide-1194-month-light", style: .light, size: CGSize(width: 1194, height: 834), wide: true, view: calendar)
+        try await render("wide-834-month-dark", style: .dark, size: CGSize(width: 834, height: 1194), wide: true, view: calendar)
+        try await render("wide-867-month-light", style: .light, size: CGSize(width: 867, height: 669), wide: true, view: calendar)
+        try await render("wide-1194-records-light", style: .light, size: CGSize(width: 1194, height: 834), wide: true,
+                         view: AnyView(NavigationStack { RecordsScreen() }))
+        try await render("wide-1194-stats-dark", style: .dark, size: CGSize(width: 1194, height: 834), wide: true,
+                         view: AnyView(NavigationStack { StatsScreen() }))
+    }
+
+    /// The whole app at the size of the device the tests run on, with its real bars
+    /// (run again on an iPad and on the iPhone Duo simulator in CI).
+    @Test func deviceRoot() async throws {
+        UserDefaults.standard.set(CalendarMode.month.rawValue, forKey: "calendar.mode")
+        UserDefaults.standard.set(MonthPattern.bars.rawValue, forKey: "calendar.pattern")
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let bounds = scene?.coordinateSpace.bounds ?? .zero
+        let traits = scene?.traitCollection
+        let name = "device-\(Int(bounds.width))x\(Int(bounds.height))"
+            + (traits?.horizontalSizeClass == .regular ? "-regular" : "-compact")
+        try await render("\(name)-root-light", style: .light, size: .zero, view: AnyView(RootView()))
+        try await render("\(name)-root-dark", style: .dark, size: .zero, view: AnyView(RootView()))
     }
 
     @Test func monthBarsDark() async throws { try await shoot("month-bars-dark", mode: .month) }

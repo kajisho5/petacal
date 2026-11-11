@@ -223,7 +223,7 @@ struct RecordEditor: View {
                             Text("写真を追加").font(.caption)
                         }
                         .frame(width: 96, height: 76)
-                        .background(Color(uiColor: .tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.fillBackground, in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
             }

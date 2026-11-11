@@ -44,9 +44,9 @@ GitHub に push すると自動で動きます（`.github/workflows/ci.yml`）�
 
 初回だけ必要な作業：
 
-1. runway の配布先にこのリポを足す：https://github.com/kajisho5/runway/edit/main/repos.txt の末尾に `kajisho5/petacal` を足して「Commit changes」
-2. Bundle ID を登録する：https://developer.apple.com/account/resources/identifiers/add/bundleId で App IDs → App → Explicit に `com.seventhwell.petacal` を入れて Register
-3. アプリを作る：https://appstoreconnect.apple.com/apps の「＋」→「新規 App」（iOS、Bundle ID は 2 のもの）
+1. runway の配布先にこのリポを足す（済み：runway の `repos.txt` に `kajisho5/petacal`）
+2. Bundle ID `com.seventhwell.petacal` を登録する（`apple-setup` ワークフローが自動で行う）
+3. アプリを作る（これだけ手作業。Apple の仕組み上、自動化できない）：https://appstoreconnect.apple.com/apps の「＋」→「新規 App」（iOS、Bundle ID は 2 のもの）
 
 実行：https://github.com/kajisho5/petacal/actions/workflows/testflight.yml の「Run workflow」。
 

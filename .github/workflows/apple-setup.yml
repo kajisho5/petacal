@@ -1,0 +1,28 @@
+# Apple 側の準備：Bundle ID が無ければ登録し、App Store Connect にアプリがあるかを表示する。
+# アプリの作成だけは Apple の API でできないので手作業（README の「TestFlight への配布」）。
+name: apple-setup
+
+on:
+  workflow_dispatch:
+  push:
+    # ブランチ上でも、このファイルを変えたときに動く（main に入る前から使えるように）
+    paths: [tools/asc_register_bundle.py, .github/workflows/apple-setup.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - run: pip install --quiet pyjwt cryptography
+      - name: Register the Bundle ID if missing
+        run: python3 tools/asc_register_bundle.py
+        env:
+          BUNDLE_ID: com.seventhwell.petacal
+          BUNDLE_NAME: petacal
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}

@@ -123,7 +123,7 @@ struct BulkPhotosSheet: View {
         if !created.isEmpty {
             let modelContext = context
             undo.show(String(localized: "記録を\(created.count)件追加しました")) {
-                created.forEach { modelContext.delete($0) }
+                for record in created { modelContext.delete(record) }
                 try? modelContext.save()
             }
         }

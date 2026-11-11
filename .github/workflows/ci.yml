@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core-linux:
+    name: PetaCore tests (Linux)
+    runs-on: ubuntu-24.04
+    container: swift:6.2
+    steps:
+      - uses: actions/checkout@v6
+      - name: Swift version
+        run: swift --version
+      - name: Test PetaCore
+        run: swift test --package-path Packages/PetaCore
+
+  ios:
+    name: Build and test (iOS Simulator)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Tool versions
+        run: |
+          xcodebuild -version
+          sw_vers
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen > /dev/null
+          xcodegen --version
+          xcodegen generate
+      - name: Pick a simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          runtimes = sorted((r for r in devices if "iOS" in r), reverse=True)
+          for runtime in runtimes:
+              for d in devices[runtime]:
+                  if d["name"].startswith("iPhone") and "Pro" not in d["name"] and d.get("isAvailable"):
+                      print(d["udid"]); sys.exit(0)
+          for runtime in runtimes:
+              for d in devices[runtime]:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"]); sys.exit(0)
+          ')
+          [ -n "$UDID" ] || { echo "::error::No iPhone simulator on this runner"; exit 1; }
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices | grep "$UDID"
+      - name: Build and test
+        run: |
+          set +e
+          xcodebuild test \
+            -project Petacal.xcodeproj \
+            -scheme Petacal \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO > xcodebuild.log 2>&1
+          status=$?
+          grep -E "error:|warning: .*(isolat|Sendable|concurrency)|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild.log | sort -u | head -300
+          exit $status
+      - name: Upload the build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          retention-days: 7

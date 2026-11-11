@@ -1,6 +1,8 @@
 import PetaCore
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// S-12 まとめ画像: the month in one picture to save or share.
 struct SummarySheet: View {
@@ -11,7 +13,7 @@ struct SummarySheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showAmounts = true
     @State private var includeOshi = true
-    @State private var image: UIImage?
+    @State private var image: NativeImage?
 
     private var card: SummaryCard {
         SummaryCard(year: year, month: month, stats: stats, showAmounts: showAmounts, includeOshi: includeOshi)
@@ -36,15 +38,15 @@ struct SummarySheet: View {
                 }
                 Section {
                     if let image {
-                        ShareLink(item: Image(uiImage: image),
-                                  preview: SharePreview(Text(verbatim: "\(year)年\(month)月のまとめ"), image: Image(uiImage: image))) {
+                        ShareLink(item: Image(native: image),
+                                  preview: SharePreview(Text(verbatim: "\(year)年\(month)月のまとめ"), image: Image(native: image))) {
                             Label("画像を保存・共有", systemImage: "square.and.arrow.up")
                         }
                     }
                 }
             }
             .navigationTitle("まとめ画像")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("閉じる", systemImage: "xmark") { dismiss() }
@@ -59,7 +61,11 @@ struct SummarySheet: View {
     private func render() {
         let renderer = ImageRenderer(content: card)
         renderer.scale = 3
+        #if os(macOS)
+        image = renderer.nsImage
+        #else
         image = renderer.uiImage
+        #endif
     }
 }
 

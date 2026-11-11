@@ -59,7 +59,7 @@ struct ColorPickerView: View {
             .padding()
         }
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
     }
 
     private func swatch(_ preset: ColorPreset) -> some View {

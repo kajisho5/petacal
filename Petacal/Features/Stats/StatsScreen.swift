@@ -78,7 +78,7 @@ struct StatsScreen: View {
         }
         .navigationTitle("集計")
         .sheet(isPresented: $showSummary) {
-            SummarySheet(year: month.year, month: month.month, stats: stats)
+            SummarySheet(year: month.year, month: month.month, stats: stats).sheetSize()
         }
     }
 

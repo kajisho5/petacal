@@ -1,5 +1,7 @@
 import EventKit
+#if os(iOS)
 import EventKitUI
+#endif
 import PetaCore
 import SwiftData
 import SwiftUI
@@ -22,12 +24,12 @@ struct DaySheet: View {
                     .padding(.bottom, 24)
             }
             .navigationTitle(Text(verbatim: store.heading(day, today: today)))
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .barLeading) {
                     Button("閉じる", systemImage: "xmark") { sheet = nil }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .barTrailing) {
                     Menu {
                         Button("予定を追加", systemImage: "calendar.badge.plus") { add() }
                             .disabled(store.access != .granted)
@@ -234,10 +236,10 @@ struct EventDetailView: View {
             }
         }
         .navigationTitle("予定")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
         .toolbar {
             if showsClose {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .barLeading) {
                     Button("閉じる", systemImage: "xmark") { sheet = nil }
                 }
             }
@@ -245,6 +247,7 @@ struct EventDetailView: View {
     }
 }
 
+#if os(iOS)
 /// The system screen for adding and editing an event (EventKitUI).
 struct EventEditor: UIViewControllerRepresentable {
     let store: EKEventStore
@@ -278,3 +281,103 @@ struct EventEditor: UIViewControllerRepresentable {
         }
     }
 }
+#else
+/// The Mac has no system screen for editing an event, so this form stands in for it.
+struct EventEditor: View {
+    let store: EKEventStore
+    let event: EKEvent?
+    let onDone: () -> Void
+
+    @State private var title = ""
+    @State private var isAllDay = false
+    @State private var start = Date()
+    @State private var end = Date().addingTimeInterval(3600)
+    @State private var location = ""
+    @State private var notes = ""
+    @State private var calendarID = ""
+    @State private var failed = false
+    @State private var loaded = false
+
+    private var calendars: [EKCalendar] {
+        store.calendars(for: .event).filter(\.allowsContentModifications)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("題名", text: $title)
+                    TextField("場所", text: $location)
+                }
+                Section {
+                    Toggle("終日", isOn: $isAllDay)
+                    DatePicker("開始", selection: $start, displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
+                    DatePicker("終了", selection: $end, in: start..., displayedComponents: isAllDay ? [.date] : [.date, .hourAndMinute])
+                }
+                Section {
+                    Picker("カレンダー", selection: $calendarID) {
+                        ForEach(calendars, id: \.calendarIdentifier) { calendar in
+                            Text(verbatim: calendar.title).tag(calendar.calendarIdentifier)
+                        }
+                    }
+                    TextField("メモ", text: $notes, axis: .vertical)
+                        .lineLimit(3...8)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(event?.eventIdentifier == nil ? "予定を追加" : "予定を編集")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { onDone() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") { save() }
+                        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || calendars.isEmpty)
+                }
+            }
+            .alert("保存できませんでした", isPresented: $failed) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("カレンダーに書き込めませんでした。保存先のカレンダーを変えて、もう一度試してください。")
+            }
+        }
+        .onAppear(perform: load)
+    }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        if let event {
+            title = event.title ?? ""
+            isAllDay = event.isAllDay
+            start = event.startDate ?? Date()
+            end = event.endDate ?? start.addingTimeInterval(3600)
+            location = event.location ?? ""
+            notes = event.notes ?? ""
+            calendarID = event.calendar?.calendarIdentifier ?? ""
+        }
+        if !calendars.contains(where: { $0.calendarIdentifier == calendarID }) {
+            calendarID = store.defaultCalendarForNewEvents?.calendarIdentifier ?? calendars.first?.calendarIdentifier ?? ""
+        }
+    }
+
+    private func save() {
+        let target = event ?? EKEvent(eventStore: store)
+        target.title = title
+        target.isAllDay = isAllDay
+        target.startDate = start
+        target.endDate = max(start, end)
+        target.location = location.isEmpty ? nil : location
+        target.notes = notes.isEmpty ? nil : notes
+        if let calendar = calendars.first(where: { $0.calendarIdentifier == calendarID }) {
+            target.calendar = calendar
+        }
+        do {
+            try store.save(target, span: .thisEvent, commit: true)
+            onDone()
+        } catch {
+            failed = true
+        }
+    }
+}
+#endif

@@ -303,7 +303,7 @@ struct MonthCompactView: View {
                 if let photo, let image = ThumbCache.image(for: photo) {
                     Color.clear
                         .aspectRatio(1, contentMode: .fit)
-                        .overlay { Image(uiImage: image).resizable().scaledToFill() }
+                        .overlay { Image(native: image).resizable().scaledToFill() }
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay(alignment: .top) {
                             // The number sits on its own plate so it stays readable on any photo.

@@ -100,6 +100,7 @@
 - 記録の下書き：的中画面や取引履歴の写真から、日付・金額・プラスかマイナスか・種目の候補を読み取ります。金額はまちがいが困るので、必ず確認画面を通します。
 - 「来週」「18日」などの日付の補完と、金額の合計は、AI ではなくアプリ側の計算で行います。
 - AI が使えない機種では②だけで下書きをつくります（回数に数えない）。
+- **実装済み（バージョン 0.8.0）**：予定の取り込みで、端末内AI が題名を整え、場所を探します【事実：使った仕組みは Foundation Models の `SystemLanguageModel`・`LanguageModelSession` [A7][A8]】。AI の答えは「題名: …」「場所: …」の2行だけを受け取り、アプリ側で確かめてから画面に出します：題名は40文字まで、**場所は元の文章にその言葉が書いてあるときだけ採用**（AI が場所を作り出せないようにするため）。日付・時刻は今までどおりアプリの計算です。候補のそばに「AIが読み取った結果です」と出し、「AIの読み取りを取り消す」で機械的な題名に戻せます。人が直した題名は上書きしません。【不明】日本語での読み取りの良し悪しは、自動チェックのシミュレータでは AI が動かないため未確認（実機で確認が必要）。
 - 内容は端末の外に送りません（iCloud 同期は利用者自身の iCloud）。
 
 ### A-4. 部品の分け方と状態管理
@@ -181,21 +182,26 @@ petacal/
 7. iPhone Duo・iPad・Mac の作り込み、審査の準備
 8. （あとで）アカウントを直接つなぐ：設定 →「アカウントを追加」で Google・Exchange・Outlook・Microsoft 365・iCloud をアプリから直接つなぐ。Google は予定ごとの色も取り込む。サービスごとにログインと各社の審査が必要なので、まず Google から（B-2「Google の色について」を参照）。本人の希望（2026-11-11）。各社の決まりは未確認
 
-#### まだ作っていない機能の一覧（バージョン 0.7.0 の時点）
+#### まだ作っていない機能の一覧（バージョン 0.9.0 の時点）
 
 設計書やモックにはあるが、アプリにはまだ無いものです。報告のたびにこの一覧を更新して載せます（作ったら消す）。
 
 | 分類 | まだ無いもの | 止まっている理由 |
 |---|---|---|
-| 取り込み | AI による題名・場所の読み取り／無料の回数制限 | AI の仕組み（Foundation Models）の資料を読んでから作る。回数制限は課金と一緒 |
+| 取り込み | AI の無料の回数制限（月5回） | 課金と一緒に入れる（今は回数を数えていない） |
+| 取り込み | AI による記録の下書き（的中画面や取引履歴の写真から金額を読む） | 未着手。金額のまちがいが困るので、確認画面と一緒に設計する |
 | 取り込み | ほかのアプリの共有からの受け取り（「ペタカレに送る」） | アプリの中に別の部品（共有の受け口）を足し、Apple 側に登録が要る。配信が止まらないよう別の回に分ける |
 | 記録・設定 | iCloud でほかの端末とそろえる（記録、色分け、表示するカレンダー、月のパターン、予算） | Apple 側で iCloud の設定を足す必要がある。同上 |
 | お金 | 課金（年額・月額・買い切り）、無料／Pro の区別、Pro の案内画面 | App Store Connect に商品の登録が要る |
 | 連携 | アカウントを直接つなぐ（Google ほか）、Google の予定ごとの色 | 各社の登録と審査が要る |
-| 端末 | iPhone Duo・iPad・Mac 向けの作り込み | 今は iPhone の形のまま動く。Mac は配信の仕組み（runway）が未対応 |
+| 端末 | Mac 用アプリの配信（TestFlight・App Store） | アプリ自体はビルドでき、画面の画像も自動チェックで出る。配信の仕組み（runway）が Mac の TestFlight に未対応 |
+| 端末 | iPhone Duo の内側を開いた状態・半分折った状態の画像での確認 | 自動チェックのシミュレータは閉じた状態で起動する。開くには外部の小さな道具（duo-hinge）が要るので、入れてよいか本人に確認してから |
+| 端末 | iPad・Mac のキーボードで ⇧⌘V（クリップボードから取り込み） | 貼り付けは専用ボタン（許可の確認が出ない）に任せているため見送り。⇧⌘N で取り込み画面を開いて「ペースト」を押す |
 | カレンダー | 最大文字サイズでの月の表示の作り込み | 未着手 |
 | 集計 | 予算の「通知」（アプリを閉じていても届く知らせ） | 今は集計の画面に出すだけ。通知は許可が要るので未着手 |
 | 仕上げ | アプリのアイコン（仮）、名前（仮。商標と重複は未確認）、プライバシーポリシーなど審査の準備 | 未着手 |
+
+バージョン 0.8.0〜0.9.0 で入れたもの：広い画面（iPad、iPhone Duo の内側）で月の横にその日の一覧／iPhone Duo の折り目の位置で左右に分ける／記録は一覧の横に内容、集計はカードを横並び／iPad のタブをサイドバーに切り替え／キーボードとメニュー（⌘N 記録を追加、⌘E 予定を追加、⇧⌘N 文章から予定をつくる、⌘T 今日、⌘F 検索、⌘1〜⌘4 タブ）／端末内AI による題名と場所の読み取り／Mac 用アプリ（サイドバー、設定ウィンドウ、予定の編集フォーム）。
 
 バージョン 0.6.0〜0.7.0 で入れたもの：月の画面の上の今月の合計／週の「終日」の +○／月の「金額」「写真」パターン／記録の種類ごとの色／追加のあとの「取り消す」／検索／推し活・趣味の予算／月のまとめ画像／写真をまとめて追加／候補日をつくる／写真とファイル（テキスト・PDF）からの取り込み。
 
@@ -442,6 +448,14 @@ petacal/
 
 **Mac（ネイティブ）**：メニューバーは ペタカレ → ファイル → 編集 → 表示 → ウインドウ → ヘルプ。サイドバーに カレンダー／記録／集計。設定は「設定…」（⌘,）の別ウィンドウ。ツールバーは1行（題名と今月の合計、今日、候補日、＋、検索）。ウィンドウの最小は 800×560pt（狭いと右の日の一覧を先に隠す）。ロックは Touch ID かパスワード。ショートカットは iPad と同じ。
 
+**実装とモックのちがい（バージョン 0.9.0）**：
+- 2列にするかどうかは端末の種類ではなく幅で決めます（使える幅が 700pt 以上で、月＋その日の一覧）。月の側が 560pt より狭いときは、帯ではなく小さい月（点と金額）にします。
+- iPhone Duo の内側は、折り目の位置を OS から読み取って、そこで左右に分けます【事実：`GeometryProxy.reservedRegions(kind:options:layoutDirectionBehavior:)`、iOS 27.1 以降 [A9][A10]】。開いているときは折り目の中心で分け、半分折ったときは折り目の範囲（余白こみ）に何も置きません。この計算は PetaCore の `PaneSplit` にあり、テスト済みです。【不明】実際の折り目の幅と、半分折ったときの見え方は実機・シミュレータで未確認。
+- iPhone Duo の外側は iPhone と同じ1列で、選んだ月のパターンのまま出します（モックは点だけでしたが、帯も入るのでそのまま）。縦に並ぶバーは OS が自動で置きます（自動チェックの画像で確認済み）。
+- 「今月の合計」はモックでは題名の横（iPad）や月の下（Duo）でしたが、実装はどの端末でも月の上の1行です。
+- iPad のキーボード：⌘N 記録を追加、⌘E 予定を追加、⇧⌘N 文章から予定をつくる、⌘T 今日、⌘F 検索、⌘1〜⌘4 タブ。⇧⌘V は見送り（一覧を参照）。
+- Mac：サイドバーは カレンダー／記録／集計／検索 と「表示するカレンダー」。モックにあったツールバーの検索欄と「AI取り込み 残り○回」は未実装（検索はサイドバーから）。予定の編集は、Mac には標準の編集画面が無い【推測：EventKitUI が macOS に無いため】ので、自前のフォームです。ウィンドウの最小は 800×560pt。
+
 S-09〜S-14 の iPad・Mac・iPhone Duo 内側での見え方：どれもシート（iPad はフォームシート、Mac はウィンドウのシート、Duo 内側は中央のシート）の中に iPhone と同じ並びで出します。S-10・S-11 は、広い画面では一覧（左）＋詳細（右）の2列にします。**これらのモックは iPhone だけ描いています。**
 
 ### 5. アクセシビリティ
@@ -530,6 +544,10 @@ S-09〜S-14 の iPad・Mac・iPhone Duo 内側での見え方：どれもシー�
 - [A4] Apple Developer「Releases」 https://developer.apple.com/news/releases/
 - [A5] Apple「Accessing the event store」 https://developer.apple.com/documentation/eventkit/accessing-the-event-store
 - [A6] Apple「EKCalendar.cgColor」（カレンダーの色は読み書きできる。2026-11-11 確認） https://developer.apple.com/documentation/eventkit/ekcalendar/cgcolor
+- [A7] Apple「SystemLanguageModel」（使えるかどうかの確かめ方。iOS／iPadOS／macOS 26.0 以降。2026-11-12 確認） https://developer.apple.com/documentation/foundationmodels/systemlanguagemodel
+- [A8] Apple「LanguageModelSession」「LanguageModelSession.Response」（2026-11-12 確認） https://developer.apple.com/documentation/foundationmodels/languagemodelsession
+- [A9] Apple「reservedRegions(kind:options:layoutDirectionBehavior:)」（折り目やカメラの位置を読む。27.1 以降。2026-11-12 確認） https://developer.apple.com/documentation/swiftui/geometryproxy/reservedregions(kind:options:layoutdirectionbehavior:)
+- [A10] Apple「ReservedRegion」（frame・margins・isActive・kind。2026-11-12 確認） https://developer.apple.com/documentation/swiftui/reservedregion
 - [G1] Google「Sensitive scope verification」 https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification
 - [G2] Google「Calendar API: Colors」（予定とカレンダーの色番号と色の値。2026-11-11 確認） https://developers.google.com/workspace/calendar/api/v3/reference/colors
 - [G3] Google「Calendar API の権限の一覧」 https://developers.google.com/calendar/api/auth
@@ -550,4 +568,6 @@ S-09〜S-14 の iPad・Mac・iPhone Duo 内側での見え方：どれもシー�
 - Apple Design Resources との見た目の照合、競合の公式の料金ページ
 - 「ペタカレ」の商標・App Store での重複
 
+- Foundation Models の日本語での読み取りの良し悪し、iPhone Duo の実際の折り目の幅（どちらも実機で未確認）。Apple の資料は API の説明ページだけを読み、iPhone Duo の解説動画（Tech Talks）は見ていない
+- Mac の SDK に `reservedRegions` が無かった（Xcode 27.1 でビルドエラー）。Apple のページには macOS 27.1 以降とあるので、ランナーの Mac 用 SDK が古い可能性がある【推測】。Mac には折り目が無いので iPhone だけで使う形にした
 - EventKit の予定（EKEvent／EKCalendarItem）の全項目。予定1件ごとの色の項目が無いことは、一覧の一部を見ただけで、全部は確認していない

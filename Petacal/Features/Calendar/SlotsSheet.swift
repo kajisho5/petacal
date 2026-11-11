@@ -1,6 +1,8 @@
 import PetaCore
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// S-04 候補日をつくる: finds free time in the calendar and writes the message to send.
 struct SlotsSheet: View {
@@ -80,7 +82,7 @@ struct SlotsSheet: View {
                         Text(verbatim: message).font(.callout).textSelection(.enabled)
                         ShareLink(item: message) { Label("共有", systemImage: "square.and.arrow.up") }
                         Button {
-                            UIPasteboard.general.string = message
+                            Clipboard.copy(message)
                             copied = true
                         } label: {
                             Label(copied ? "コピーしました" : "コピー", systemImage: copied ? "checkmark" : "doc.on.doc")
@@ -89,7 +91,7 @@ struct SlotsSheet: View {
                 }
             }
             .navigationTitle("候補日をつくる")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("閉じる", systemImage: "xmark") { dismiss() }

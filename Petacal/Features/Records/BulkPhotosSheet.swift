@@ -2,7 +2,9 @@ import PetaCore
 import PhotosUI
 import SwiftData
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// S-14 写真をまとめて追加: pick many photos; they become one record per day they were taken.
 struct BulkPhotosSheet: View {
@@ -55,8 +57,8 @@ struct BulkPhotosSheet: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 6) {
                                         ForEach(group.indices, id: \.self) { index in
-                                            if let image = UIImage(data: photos[index].data) {
-                                                Image(uiImage: image)
+                                            if let image = NativeImage(data: photos[index].data) {
+                                                Image(native: image)
                                                     .resizable()
                                                     .scaledToFill()
                                                     .frame(width: 56, height: 56)
@@ -73,7 +75,7 @@ struct BulkPhotosSheet: View {
                 }
             }
             .navigationTitle("写真をまとめて追加")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル", systemImage: "xmark") { dismiss() }

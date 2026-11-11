@@ -144,6 +144,9 @@ struct RecordThumb: View {
     let record: Record
     var size: CGFloat = 44
 
+    @Environment(ColorStore.self) private var colors
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
         Group {
             if let photo = record.sortedPhotos.first, let image = ThumbCache.image(for: photo) {
@@ -151,11 +154,12 @@ struct RecordThumb: View {
                     .resizable()
                     .scaledToFill()
             } else {
+                // The kind's colour, with its own symbol so colour is not the only cue.
                 Image(systemName: record.kind.symbol)
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(uiColor: .tertiarySystemFill))
+                    .background(colors.color(for: record.kind, scheme: scheme).opacity(0.35))
             }
         }
         .frame(width: size, height: size)

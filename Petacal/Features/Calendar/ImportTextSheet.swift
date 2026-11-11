@@ -7,6 +7,7 @@ struct ImportTextSheet: View {
     @Binding var sheet: CalendarSheet?
 
     @Environment(CalendarStore.self) private var store
+    @Environment(UndoCenter.self) private var undo
     @State private var text: String
     @State private var found: [Candidate] = []
     @State private var searched = false
@@ -151,6 +152,7 @@ struct ImportTextSheet: View {
 
     private func addChosen() {
         var anyFailed = false
+        var added: [String] = []
         for candidate in chosen {
             guard let dayStart = candidate.event.day.date(calendar: store.calendar) else { continue }
             let draft: QuickDraft
@@ -162,7 +164,18 @@ struct ImportTextSheet: View {
             } else {
                 draft = QuickDraft(title: candidate.title, start: dayStart, end: dayStart, isAllDay: true, calendarID: calendarID)
             }
-            do { try store.add(draft) } catch { anyFailed = true }
+            do {
+                if let identifier = try store.add(draft) { added.append(identifier) }
+            } catch {
+                anyFailed = true
+            }
+        }
+        if !added.isEmpty {
+            let calendarStore = store
+            let identifiers = added
+            undo.show(String(localized: "予定を\(identifiers.count)件追加しました")) {
+                identifiers.forEach { calendarStore.remove(eventIdentifier: $0) }
+            }
         }
         if anyFailed { failed = true } else { sheet = nil }
     }

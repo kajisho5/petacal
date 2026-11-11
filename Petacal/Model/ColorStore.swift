@@ -8,7 +8,13 @@ import SwiftUI
 final class ColorStore {
     private(set) var calendarChoices: [String: Int]
     private(set) var eventChoices: [String: Int]
+    /// Record kind raw value -> preset. Kinds without a choice use `kindDefaults`.
+    private(set) var kindChoices: [String: Int]
     private let defaults: UserDefaults
+
+    /// 収支: 青緑・こい / 推し活・趣味: ピンク・あざやか / メモ: グレー・あざやか
+    static let kindDefaults: [RecordKind: Int] = [.balance: 23, .oshi: 35, .free: 45]
+    private static let kindKey = "colors.kind"
 
     private static let calendarKey = "colors.calendar"
     private static let eventKey = "colors.event"
@@ -17,6 +23,21 @@ final class ColorStore {
         self.defaults = defaults
         calendarChoices = (defaults.dictionary(forKey: ColorStore.calendarKey) as? [String: Int]) ?? [:]
         eventChoices = (defaults.dictionary(forKey: ColorStore.eventKey) as? [String: Int]) ?? [:]
+        kindChoices = (defaults.dictionary(forKey: ColorStore.kindKey) as? [String: Int]) ?? [:]
+    }
+
+    func setKind(_ kind: RecordKind, preset: Int?) {
+        kindChoices[kind.rawValue] = preset
+        defaults.set(kindChoices, forKey: ColorStore.kindKey)
+    }
+
+    func preset(for kind: RecordKind) -> ColorPreset {
+        let id = kindChoices[kind.rawValue] ?? ColorStore.kindDefaults[kind] ?? 45
+        return ColorPalette.preset(id) ?? ColorPalette.presets[45]
+    }
+
+    func color(for kind: RecordKind, scheme: ColorScheme) -> Color {
+        Color(preset(for: kind), scheme: scheme)
     }
 
     func setCalendar(_ id: String, preset: Int?) {

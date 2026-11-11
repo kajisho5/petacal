@@ -17,7 +17,7 @@ enum CalendarMode: String, CaseIterable, Identifiable {
 }
 
 enum MonthPattern: String, CaseIterable, Identifiable {
-    case bars, dots
+    case bars, dots, amount, photo
     var id: String { rawValue }
 }
 
@@ -95,6 +95,9 @@ struct CalendarScreen: View {
             .padding(.horizontal)
             .padding(.vertical, 8)
 
+            if mode == .month && !lock.isLocked {
+                MonthTotalsLine(records: records, month: month, calendar: calendar)
+            }
             if store.access == .denied {
                 AccessDeniedBanner()
             }
@@ -139,30 +142,7 @@ struct CalendarScreen: View {
                 .buttonStyle(.borderedProminent)
             }
         }
-        .sheet(item: $sheet) { current in
-            switch current {
-            case .day(let day):
-                DaySheet(day: day, sheet: $sheet)
-            case .event(let item):
-                NavigationStack { EventDetailView(item: item, sheet: $sheet, showsClose: true) }
-                    .presentationDetents([.medium, .large])
-            case .new(let date, let allDay):
-                QuickAddSheet(start: date, allDay: allDay, sheet: $sheet)
-            case .compose(let draft):
-                EventEditor(store: store.eventStore, event: store.makeEvent(from: draft)) { store.reload(); sheet = nil }
-                    .ignoresSafeArea()
-            case .edit(let item):
-                EventEditor(store: store.eventStore, event: store.ekEvent(for: item)) {
-                    store.reload()
-                    sheet = nil
-                }
-                .ignoresSafeArea()
-            case .record(let target):
-                RecordEditor(target: target)
-            case .importText:
-                ImportTextSheet(sheet: $sheet)
-            }
-        }
+        .calendarSheets($sheet)
         .sensoryFeedback(.impact(weight: .medium), trigger: pressCount)
         .task(id: month) { loadAround() }
         .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged).receive(on: RunLoop.main)) { _ in
@@ -177,8 +157,8 @@ struct CalendarScreen: View {
         Group {
             switch mode {
             case .month:
-                if pattern == .dots {
-                    MonthDotsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
+                if pattern != .bars {
+                    MonthCompactView(style: pattern, grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
                                   today: today, focus: $focus, sheet: $sheet) { addAllDay(on: $0) }
                 } else {
                     MonthBarsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
@@ -239,6 +219,46 @@ struct CalendarScreen: View {
     }
 }
 
+/// Presents whatever `CalendarSheet` asks for. Shared by the calendar and the search screen.
+private struct CalendarSheetHost: ViewModifier {
+    @Binding var sheet: CalendarSheet?
+    @Environment(CalendarStore.self) private var store
+
+    func body(content: Content) -> some View {
+        content
+        .sheet(item: $sheet) { current in
+            switch current {
+            case .day(let day):
+                DaySheet(day: day, sheet: $sheet)
+            case .event(let item):
+                NavigationStack { EventDetailView(item: item, sheet: $sheet, showsClose: true) }
+                    .presentationDetents([.medium, .large])
+            case .new(let date, let allDay):
+                QuickAddSheet(start: date, allDay: allDay, sheet: $sheet)
+            case .compose(let draft):
+                EventEditor(store: store.eventStore, event: store.makeEvent(from: draft)) { store.reload(); sheet = nil }
+                    .ignoresSafeArea()
+            case .edit(let item):
+                EventEditor(store: store.eventStore, event: store.ekEvent(for: item)) {
+                    store.reload()
+                    sheet = nil
+                }
+                .ignoresSafeArea()
+            case .record(let target):
+                RecordEditor(target: target)
+            case .importText:
+                ImportTextSheet(sheet: $sheet)
+            }
+        }
+    }
+}
+
+extension View {
+    func calendarSheets(_ sheet: Binding<CalendarSheet?>) -> some View {
+        modifier(CalendarSheetHost(sheet: sheet))
+    }
+}
+
 /// S-06: shown before the system dialog. One button.
 private struct AccessIntro: View {
     let action: () -> Void
@@ -253,6 +273,42 @@ private struct AccessIntro: View {
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxHeight: .infinity)
+    }
+}
+
+/// 今月の合計: one line above the month. Hidden when the month has no amounts.
+private struct MonthTotalsLine: View {
+    let records: [Record]
+    let month: MonthRef
+    let calendar: Calendar
+
+    var body: some View {
+        let inMonth = records.filter {
+            let day = DayKey(date: $0.day, calendar: calendar)
+            return day.year == month.year && day.month == month.month
+        }
+        let stats = StatsCalculator.monthStats(inMonth.map { RecordAmount(kind: $0.kind, category: $0.category, amount: $0.amount) })
+        if stats.plusCount + stats.minusCount + stats.oshiCount > 0 {
+            HStack(spacing: 12) {
+                if stats.plusCount + stats.minusCount > 0 {
+                    Text(verbatim: String(localized: "収支") + " " + Yen.signed(stats.balanceTotal))
+                        .foregroundStyle(Color.amount(stats.balanceTotal))
+                }
+                if stats.oshiSpent > 0 {
+                    Text(verbatim: String(localized: "推し活・趣味") + " " + Yen.plain(stats.oshiSpent))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.footnote.weight(.semibold))
+            .monospacedDigit()
+            .padding(.horizontal)
+            .padding(.bottom, 6)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text(verbatim: String(localized: "今月の合計") + " "
+                + String(localized: "収支") + " " + Yen.signed(stats.balanceTotal) + " "
+                + String(localized: "推し活・趣味") + " " + Yen.plain(stats.oshiSpent)))
+        }
     }
 }
 

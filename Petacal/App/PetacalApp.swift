@@ -7,6 +7,7 @@ struct PetacalApp: App {
     @State private var calendarStore = CalendarStore()
     @State private var colorStore = ColorStore()
     @State private var lockGate = LockGate()
+    @State private var undoCenter = UndoCenter()
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +15,7 @@ struct PetacalApp: App {
                 .environment(calendarStore)
                 .environment(colorStore)
                 .environment(lockGate)
+                .environment(undoCenter)
         }
         .modelContainer(for: [Record.self, RecordPhoto.self])
         .onChange(of: scenePhase) { _, phase in

@@ -58,8 +58,10 @@ struct PatternSettingsScreen: View {
             Section {
                 row(.bars, title: "帯（標準）", detail: "予定の題名が見える")
                 row(.dots, title: "点と一覧", detail: "月は小さく、下に一覧")
+                row(.amount, title: "金額", detail: "その日の金額を大きく")
+                row(.photo, title: "写真", detail: "記録の写真を日ごとに並べる")
             } footer: {
-                Text("「日」「週」の画面は、どちらでも同じです。「金額」「写真」のパターンは、記録の機能と一緒に追加します。")
+                Text("「日」「週」の画面は、どのパターンでも同じです。")
             }
         }
         .navigationTitle("カレンダーの表示")
@@ -85,12 +87,24 @@ struct PatternSettingsScreen: View {
     }
 }
 
-/// 設定 → 色分け: one colour per calendar.
+/// 設定 → 色分け: one colour per calendar and per record kind.
 struct ColorSettingsScreen: View {
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
     @Environment(\.colorScheme) private var scheme
-    @State private var editing: CalendarInfo?
+    @State private var editing: ColorTarget?
+
+    enum ColorTarget: Identifiable {
+        case calendar(CalendarInfo)
+        case kind(RecordKind)
+
+        var id: String {
+            switch self {
+            case .calendar(let info): "calendar-\(info.id)"
+            case .kind(let kind): "kind-\(kind.rawValue)"
+            }
+        }
+    }
 
     var body: some View {
         List {
@@ -102,62 +116,95 @@ struct ColorSettingsScreen: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(store.calendars) { info in
-                    Button { editing = info } label: {
-                        HStack(spacing: 12) {
-                            Circle().fill(colors.color(for: info, scheme: scheme)).frame(width: 24, height: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(verbatim: info.title).foregroundStyle(.primary)
-                                if !info.account.isEmpty {
-                                    Text(verbatim: info.account).font(.footnote).foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                            Text(verbatim: colors.calendarChoices[info.id].flatMap(ColorPalette.preset)?.name
-                                 ?? String(localized: "元の色"))
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.forward")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                                .accessibilityHidden(true)
-                        }
-                        .contentShape(Rectangle())
+                    row(color: colors.color(for: info, scheme: scheme), title: info.title, detail: info.account,
+                        value: colors.calendarChoices[info.id].flatMap(ColorPalette.preset)?.name ?? String(localized: "元の色")) {
+                        editing = .calendar(info)
                     }
                 }
             } header: {
                 Text("カレンダー")
+            }
+            Section {
+                ForEach(RecordKind.allCases, id: \.self) { kind in
+                    row(color: colors.color(for: kind, scheme: scheme), title: kind.label, detail: "",
+                        value: colors.preset(for: kind).name) {
+                        editing = .kind(kind)
+                    }
+                }
+            } header: {
+                Text("記録の種類")
             } footer: {
-                Text("50色から選べます。予定を1件だけ別の色にするときは、予定を開いて「色」を選びます。ここで選んだ色はこのアプリの中だけで使い、Google カレンダーなど元のカレンダーの色は変わりません。記録の種類の色は、記録の機能と一緒に追加します。")
+                Text("50色から選べます。予定を1件だけ別の色にするときは、予定を開いて「色」を選びます。ここで選んだ色はこのアプリの中だけで使い、Google カレンダーなど元のカレンダーの色は変わりません。")
             }
         }
         .navigationTitle("色分け")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $editing) { info in
-            ColorPickerSheet(info: info)
+        .sheet(item: $editing) { target in
+            ColorPickerSheet(target: target)
         }
         .onAppear { store.reload() }
+    }
+
+    private func row(color: Color, title: String, detail: String, value: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Circle().fill(color).frame(width: 24, height: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: title).foregroundStyle(.primary)
+                    if !detail.isEmpty {
+                        Text(verbatim: detail).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Text(verbatim: value).foregroundStyle(.secondary)
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
     }
 }
 
 /// The picker as a sheet: nothing changes until the check mark is tapped.
 private struct ColorPickerSheet: View {
-    let info: CalendarInfo
+    let target: ColorSettingsScreen.ColorTarget
 
     @Environment(ColorStore.self) private var colors
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @State private var draft: Int?
     @State private var loaded = false
 
+    private var name: String {
+        switch target {
+        case .calendar(let info): info.title
+        case .kind(let kind): kind.label
+        }
+    }
+
+    private var fallback: Color {
+        switch target {
+        case .calendar(let info): Color(info.color)
+        case .kind(let kind): ColorPalette.preset(ColorStore.kindDefaults[kind] ?? 45).map { Color($0, scheme: scheme) } ?? .gray
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            ColorPickerView(title: "「\(info.title)」の色", sample: info.title, fallback: Color(info.color),
-                            resetLabel: "元の色に戻す", selection: $draft)
+            ColorPickerView(title: "「\(name)」の色", sample: name, fallback: fallback,
+                            resetLabel: "最初の色に戻す", selection: $draft)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("キャンセル", systemImage: "xmark") { dismiss() }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("完了", systemImage: "checkmark") {
-                            colors.setCalendar(info.id, preset: draft)
+                            switch target {
+                            case .calendar(let info): colors.setCalendar(info.id, preset: draft)
+                            case .kind(let kind): colors.setKind(kind, preset: draft)
+                            }
                             dismiss()
                         }
                         .buttonStyle(.borderedProminent)
@@ -166,7 +213,10 @@ private struct ColorPickerSheet: View {
         }
         .onAppear {
             if !loaded {
-                draft = colors.calendarChoices[info.id]
+                switch target {
+                case .calendar(let info): draft = colors.calendarChoices[info.id]
+                case .kind(let kind): draft = colors.kindChoices[kind.rawValue]
+                }
                 loaded = true
             }
         }

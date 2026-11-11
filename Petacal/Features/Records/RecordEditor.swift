@@ -10,6 +10,7 @@ struct RecordEditor: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(UndoCenter.self) private var undo
     @Query private var allRecords: [Record]
 
     @State private var kind: RecordKind
@@ -254,6 +255,13 @@ struct RecordEditor: View {
         for old in record.photos ?? [] { context.delete(old) }
         record.photos = photos.enumerated().map { index, data in RecordPhoto(data: data, order: index) }
         try? context.save()
+        if existing == nil {
+            let modelContext = context
+            undo.show(String(localized: "記録を追加しました")) {
+                modelContext.delete(record)
+                try? modelContext.save()
+            }
+        }
         dismiss()
     }
 

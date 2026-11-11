@@ -166,6 +166,25 @@ final class CalendarStore {
         return event.eventIdentifier
     }
 
+    /// Deletes an event that was just added (for "取り消す").
+    func remove(eventIdentifier: String) {
+        guard !isSample, let event = eventStore.event(withIdentifier: eventIdentifier) else { return }
+        try? eventStore.remove(event, span: .thisEvent, commit: true)
+        reload()
+    }
+
+    /// Events from one year back to one year ahead, for searching.
+    func eventsAround() -> [EventItem] {
+        if isSample { return sampleItems.filter { isVisible($0.calendarID) } }
+        guard access == .granted,
+              let from = calendar.date(byAdding: .year, value: -1, to: Date()),
+              let to = calendar.date(byAdding: .year, value: 1, to: Date()) else { return [] }
+        let predicate = eventStore.predicateForEvents(withStart: from, end: to, calendars: nil)
+        return eventStore.events(matching: predicate).map(CalendarStore.item)
+            .filter { isVisible($0.calendarID) }
+            .sorted { $0.start > $1.start }
+    }
+
     /// The EventKit object behind an item (for the system edit screen).
     func ekEvent(for item: EventItem) -> EKEvent? {
         let predicate = eventStore.predicateForEvents(withStart: item.start.addingTimeInterval(-1),

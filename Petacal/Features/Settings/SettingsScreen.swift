@@ -33,12 +33,12 @@ struct SettingsScreen: View {
                 .alert("ロックを使えません", isPresented: $lockUnavailable) {
                     Button("OK", role: .cancel) {}
                 } message: {
-                    Text("iPhone にパスコードが設定されていません。「設定」アプリでパスコードを設定してから、もう一度試してください。")
+                    Text("この端末にパスコードが設定されていません。「設定」アプリでパスコードを設定してから、もう一度試してください。")
                 }
                 LabeledContent("推し活・趣味の予算（月）") {
                     HStack(spacing: 4) {
                         TextField("なし", value: $oshiBudget, format: .number)
-                            .keyboardType(.numberPad)
+                            .numberPad()
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 120)
                         Text("円").foregroundStyle(.secondary)
@@ -52,7 +52,7 @@ struct SettingsScreen: View {
             Section {
                 LabeledContent("バージョン", value: version)
             } footer: {
-                Text("記録は今はこの iPhone の中だけに保存されます。iCloud でほかの端末とそろえる機能は、このあと追加します。")
+                Text("記録は今はこの端末 の中だけに保存されます。iCloud でほかの端末とそろえる機能は、このあと追加します。")
             }
         }
         .navigationTitle("設定")
@@ -75,7 +75,7 @@ struct PatternSettingsScreen: View {
             }
         }
         .navigationTitle("カレンダーの表示")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
     }
 
     private func row(_ pattern: MonthPattern, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
@@ -148,9 +148,9 @@ struct ColorSettingsScreen: View {
             }
         }
         .navigationTitle("色分け")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
         .sheet(item: $editing) { target in
-            ColorPickerSheet(target: target)
+            ColorPickerSheet(target: target).sheetSize()
         }
         .onAppear { store.reload() }
     }
@@ -267,19 +267,19 @@ struct VisibleCalendarsScreen: View {
                         }
                     }
                 } header: {
-                    Text(verbatim: account.name.isEmpty ? String(localized: "この iPhone") : account.name)
+                    Text(verbatim: account.name.isEmpty ? String(localized: "この端末") : account.name)
                 }
             }
             if !store.calendars.isEmpty {
                 Section {
                     Button("すべて表示") { store.calendars.forEach { store.setVisible($0.id, true) } }
                 } footer: {
-                    Text("オフにしたカレンダーの予定は、このアプリに出なくなります（元のカレンダーからは消えません）。カレンダーやアカウントの追加・削除は、iPhone の「設定」アプリのカレンダーの項目で行います。")
+                    Text("オフにしたカレンダーの予定は、このアプリに出なくなります（元のカレンダーからは消えません）。カレンダーやアカウントの追加・削除は、端末の「設定」アプリのカレンダーの項目で行います。")
                 }
             }
         }
         .navigationTitle("表示するカレンダー")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
         .onAppear { store.reload() }
     }
 }

@@ -1,7 +1,9 @@
 import PetaCore
 import SwiftData
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// Which record the editor is for.
 enum RecordTarget: Identifiable {
@@ -27,6 +29,14 @@ struct RecordsScreen: View {
     /// The record shown on the trailing side (wide screens only).
     @State private var selectedID: UUID?
     @Environment(\.horizontalSizeClass) private var widthClass
+    /// A Mac window is always treated as wide enough to decide by its real width.
+    private var isRegularWidth: Bool {
+        #if os(macOS)
+        true
+        #else
+        widthClass == .regular
+        #endif
+    }
 
     private var shown: [Record] {
         filter == "all" ? records : records.filter { $0.kindRaw == filter }
@@ -53,7 +63,7 @@ struct RecordsScreen: View {
                 }
             } else {
                 GeometryReader { proxy in
-                    if widthClass == .regular, proxy.size.width >= PaneSplit.minimumWidth {
+                    if isRegularWidth, proxy.size.width >= PaneSplit.minimumWidth {
                         // Wide screens: the list on the leading side, the chosen record beside it.
                         // Until something is chosen, the newest record is shown.
                         let current = shown.first { $0.id == selectedID } ?? shown.first
@@ -72,7 +82,7 @@ struct RecordsScreen: View {
         }
         .navigationTitle("記録")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .barTrailing) {
                 Menu {
                     Button("記録を追加", systemImage: "square.and.pencil") { add() }
                     Button("写真をまとめて記録にする", systemImage: "photo.on.rectangle.angled") { bulk = true }
@@ -84,9 +94,9 @@ struct RecordsScreen: View {
             }
         }
         .sheet(item: $target) { target in
-            RecordEditor(target: target)
+            RecordEditor(target: target).sheetSize()
         }
-        .sheet(isPresented: $bulk) { BulkPhotosSheet() }
+        .sheet(isPresented: $bulk) { BulkPhotosSheet().sheetSize() }
     }
 
     private func list(wide: Bool, current: UUID?) -> some View {
@@ -217,17 +227,21 @@ struct RecordRow: View {
 
 /// Small decoded photos, kept in memory so lists do not decode full-size photos while scrolling.
 enum ThumbCache {
-    private static let cache = NSCache<NSString, UIImage>()
+    private static let cache = NSCache<NSString, NativeImage>()
 
-    static func image(for photo: RecordPhoto) -> UIImage? {
+    static func image(for photo: RecordPhoto) -> NativeImage? {
         let key = photo.id.uuidString as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        guard let full = UIImage(data: photo.data) else { return nil }
+        guard let full = NativeImage(data: photo.data) else { return nil }
+        #if os(macOS)
+        let small = full
+        #else
         // Keep the shape: the short side becomes 176pt and the view crops the rest.
         let shortSide = max(min(full.size.width, full.size.height), 1)
         let scale = min(1, 176 / shortSide)
         let size = CGSize(width: full.size.width * scale, height: full.size.height * scale)
         let small = full.preparingThumbnail(of: size) ?? full
+        #endif
         cache.setObject(small, forKey: key)
         return small
     }
@@ -243,7 +257,7 @@ struct RecordThumb: View {
     var body: some View {
         Group {
             if let photo = record.sortedPhotos.first, let image = ThumbCache.image(for: photo) {
-                Image(uiImage: image)
+                Image(native: image)
                     .resizable()
                     .scaledToFill()
             } else {

@@ -130,3 +130,51 @@ jobs:
           name: xcodebuild-log
           path: xcodebuild.log
           retention-days: 7
+
+  mac:
+    name: Build and test (Mac)
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select Xcode 27.1
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_27.1*.app | grep -vi beta | head -1)
+          [ -n "$XCODE" ] || { echo "::error::Xcode 27.1 is not on this runner"; ls /Applications | grep -i xcode; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          sw_vers
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen > /dev/null
+          xcodegen generate
+      # Signed "to run locally" and without the sandbox, so the tests can save the pictures of the window.
+      - name: Build and test
+        run: |
+          set +e
+          xcodebuild test \
+            -project Petacal.xcodeproj \
+            -scheme PetacalMac \
+            -destination "platform=macOS" \
+            -derivedDataPath build/DerivedDataMac \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+            CODE_SIGN_ENTITLEMENTS= ENABLE_HARDENED_RUNTIME=NO > xcodebuild-mac.log 2>&1
+          status=$?
+          grep -E "error:|warning: .*(isolat|Sendable|concurrency)|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild-mac.log | sort -u | head -300
+          ls -la /tmp/petacal-shots-mac 2>/dev/null
+          exit $status
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: screenshots-mac
+          path: /tmp/petacal-shots-mac
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload the build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: xcodebuild-mac-log
+          path: xcodebuild-mac.log
+          retention-days: 7

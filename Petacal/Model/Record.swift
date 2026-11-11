@@ -1,8 +1,11 @@
 import Foundation
 import PetaCore
 import SwiftData
+import ImageIO
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// 記録: a photo, an amount and a memo on a day. Every property has a default and relationships are
 /// optional, so the same model can sync through iCloud later without changing shape.
@@ -103,21 +106,11 @@ extension Array where Element == Record {
 
 extension Color {
     /// Plus amounts (always shown with a + sign as well).
-    static let plusAmount = Color(uiColor: UIColor { @Sendable traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1) : UIColor(red: 0.09, green: 0.44, blue: 0.18, alpha: 1)
-    })
+    static let plusAmount = Color.adaptive(light: (0.09, 0.44, 0.18), dark: (0.19, 0.82, 0.35))
     /// Minus amounts (always shown with a − sign as well).
-    static let minusAmount = Color(uiColor: UIColor { @Sendable traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 1, green: 0.41, blue: 0.38, alpha: 1) : UIColor(red: 0.77, green: 0, blue: 0.10, alpha: 1)
-    })
-
+    static let minusAmount = Color.adaptive(light: (0.77, 0, 0.10), dark: (1, 0.41, 0.38))
     /// Budget notices (always shown with a triangle symbol and words as well).
-    static let warnAmount = Color(uiColor: UIColor { @Sendable traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 1, green: 0.70, blue: 0.25, alpha: 1) : UIColor(red: 0.54, green: 0.32, blue: 0, alpha: 1)
-    })
+    static let warnAmount = Color.adaptive(light: (0.54, 0.32, 0), dark: (1, 0.70, 0.25))
 
     static func amount(_ value: Int) -> Color {
         value > 0 ? .plusAmount : (value < 0 ? .minusAmount : .primary)
@@ -127,6 +120,20 @@ extension Color {
 /// Shrinks a picked photo so records stay small enough to sync.
 enum PhotoShrinker {
     static func jpeg(from data: Data, maxSide: CGFloat = 2048) -> Data? {
+        #if os(macOS)
+        // ImageIO: decode at most `maxSide` on the long side, upright, then write a JPEG.
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxSide),
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? output as Data : nil
+        #else
         guard let image = UIImage(data: data) else { return nil }
         let longest = max(image.size.width, image.size.height)
         guard longest > maxSide else { return image.jpegData(compressionQuality: 0.85) }
@@ -138,5 +145,6 @@ enum PhotoShrinker {
             image.draw(in: CGRect(origin: .zero, size: size))
         }
         return resized.jpegData(compressionQuality: 0.85)
+        #endif
     }
 }

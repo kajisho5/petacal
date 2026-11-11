@@ -62,6 +62,14 @@ struct CalendarScreen: View {
     @Environment(LockGate.self) private var lock
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var widthClass
+    /// A Mac window is always treated as wide enough to decide by its real width.
+    private var isRegularWidth: Bool {
+        #if os(macOS)
+        true
+        #else
+        widthClass == .regular
+        #endif
+    }
     /// Missing in previews and tests that show this screen on its own.
     @Environment(AppRouter.self) private var router: AppRouter?
     @Query private var records: [Record]
@@ -120,16 +128,16 @@ struct CalendarScreen: View {
         // The keyboard of a sheet on top must not squeeze the calendar underneath.
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .navigationTitle(Text(verbatim: title))
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .barLeading) {
                 Button("今日") { focus = today }
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .barTrailing) {
                 Button("前へ", systemImage: "chevron.backward") { move(by: -1) }
                 Button("次へ", systemImage: "chevron.forward") { move(by: 1) }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .barTrailing) {
                 Menu {
                     Button("予定を追加", systemImage: "calendar.badge.plus") {
                         sheet = .new(newEventStart(on: focus), allDay: false)
@@ -189,7 +197,7 @@ struct CalendarScreen: View {
             case .month:
                 GeometryReader { proxy in
                     // Decided by the room there is, not by the kind of device.
-                    let split = widthClass == .regular
+                    let split = isRegularWidth
                         ? PaneSplit.compute(width: proxy.size.width, fold: FoldReader.fold(in: proxy)) : nil
                     if let split {
                         wideMonth(split)
@@ -336,6 +344,7 @@ private struct CalendarSheetHost: ViewModifier {
     func body(content: Content) -> some View {
         content
         .sheet(item: $sheet) { current in
+            Group {
             switch current {
             case .day(let day):
                 DaySheet(day: day, sheet: $sheet)
@@ -362,6 +371,8 @@ private struct CalendarSheetHost: ViewModifier {
             case .slots:
                 SlotsSheet()
             }
+            }
+            .sheetSize()
         }
     }
 }
@@ -380,7 +391,7 @@ private struct AccessIntro: View {
         ContentUnavailableView {
             Label("カレンダーの予定を表示します", systemImage: "calendar")
         } description: {
-            Text("この iPhone に登録してあるカレンダー（iCloud、Google など）の予定を、ここに並べます。予定の内容が外に送られることはありません。")
+            Text("この端末 に登録してあるカレンダー（iCloud、Google など）の予定を、ここに並べます。予定の内容が外に送られることはありません。")
         } actions: {
             Button("続ける", action: action)
                 .buttonStyle(.borderedProminent)
@@ -431,7 +442,7 @@ private struct AccessAskBanner: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("この iPhone のカレンダーの予定も、ここに並べられます。")
+            Text("この端末 のカレンダーの予定も、ここに並べられます。")
                 .font(.subheadline)
             Button("続ける", action: action)
                 .font(.subheadline.weight(.semibold))
@@ -449,11 +460,7 @@ private struct AccessDeniedBanner: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("予定を表示するには、「設定」でカレンダーへのフルアクセスを許可してください。")
                 .font(.subheadline)
-            Button("設定を開く") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-            }
+            Button("設定を開く") { SystemSettings.openPrivacy() }
             .font(.subheadline.weight(.semibold))
         }
         .frame(maxWidth: .infinity, alignment: .leading)

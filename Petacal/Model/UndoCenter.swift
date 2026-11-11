@@ -1,6 +1,8 @@
 import Observation
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// The "追加しました — 取り消す" bar shown for a few seconds after something is added.
 /// After it goes away, the item can still be deleted from its own screen.
@@ -15,7 +17,7 @@ final class UndoCenter {
         let mine = token
         self.message = message
         action = undo
-        UIAccessibility.post(notification: .announcement, argument: message)
+        AccessibilityNotification.Announcement(message).post()
         Task {
             try? await Task.sleep(for: .seconds(6))
             if token == mine { clear() }

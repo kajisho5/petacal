@@ -2,7 +2,9 @@ import PetaCore
 import PhotosUI
 import SwiftData
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// S-09 記録を追加／編集.
 struct RecordEditor: View {
@@ -116,7 +118,7 @@ struct RecordEditor: View {
                                 .accessibilityLabel(Text("金額の向き"))
                             }
                             TextField(kind == .oshi ? "使った金額" : "金額", text: $amountText)
-                                .keyboardType(.numberPad)
+                                .numberPad()
                                 .multilineTextAlignment(.trailing)
                                 .focused($amountFocused)
                             Text("円").foregroundStyle(.secondary)
@@ -149,7 +151,7 @@ struct RecordEditor: View {
                 }
             }
             .navigationTitle(existing == nil ? "記録を追加" : "記録を編集")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル", systemImage: "xmark") {
@@ -165,10 +167,12 @@ struct RecordEditor: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(!canSave || isLoadingPhotos)
                 }
+                #if os(iOS)
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("完了") { amountFocused = false }
                 }
+                #endif
             }
         }
         .interactiveDismissDisabled(changed && canSave)
@@ -191,8 +195,8 @@ struct RecordEditor: View {
             HStack(spacing: 10) {
                 ForEach(Array(photos.enumerated()), id: \.offset) { index, data in
                     ZStack(alignment: .topTrailing) {
-                        if let image = UIImage(data: data) {
-                            Image(uiImage: image)
+                        if let image = NativeImage(data: data) {
+                            Image(native: image)
                                 .resizable()
                                 .scaledToFill()
                                 .frame(width: 76, height: 76)

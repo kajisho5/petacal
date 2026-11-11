@@ -2,7 +2,9 @@ import EventKit
 import Observation
 import PetaCore
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// One occurrence of an event, copied out of EventKit so views do not hold EventKit objects.
 struct EventItem: Identifiable, Hashable {
@@ -231,11 +233,20 @@ final class CalendarStore {
 
     private static func rgb(_ color: CGColor?) -> RGB {
         guard let color else { return RGB(red: 0, green: 0.53, blue: 1) }
+        #if os(macOS)
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let converted = color.converted(to: space, intent: .defaultIntent, options: nil),
+              let parts = converted.components, parts.count >= 3 else {
+            return RGB(red: 0, green: 0.53, blue: 1)
+        }
+        return RGB(red: Double(parts[0]), green: Double(parts[1]), blue: Double(parts[2]))
+        #else
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard UIColor(cgColor: color).getRed(&r, green: &g, blue: &b, alpha: &a) else {
             return RGB(red: 0, green: 0.53, blue: 1)
         }
         return RGB(red: Double(r), green: Double(g), blue: Double(b))
+        #endif
     }
 }
 

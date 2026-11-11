@@ -1,7 +1,9 @@
 import PetaCore
 import PhotosUI
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 import UniformTypeIdentifiers
 
 /// S-03 予定を取り込む（文章）: paste a message, check the events found in it, add the ones you want.
@@ -95,7 +97,7 @@ struct ImportTextSheet: View {
                 } header: {
                     Text("文章")
                 } footer: {
-                    Text("LINE やメールの文章をコピーして、「ペースト」を押します。告知やチケットの写真、テキストや PDF のファイルからも読み取れます（この iPhone の中で読み取り、外には送りません）。日付が入っている文ごとに、予定の候補をつくります。")
+                    Text("LINE やメールの文章をコピーして、「ペースト」を押します。告知やチケットの写真、テキストや PDF のファイルからも読み取れます（この端末 の中で読み取り、外には送りません）。日付が入っている文ごとに、予定の候補をつくります。")
                 }
 
                 if searched && found.isEmpty {
@@ -169,7 +171,7 @@ struct ImportTextSheet: View {
                 }
             }
             .navigationTitle("文章から予定をつくる")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル", systemImage: "xmark") {

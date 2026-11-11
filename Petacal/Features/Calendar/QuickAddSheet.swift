@@ -105,7 +105,7 @@ struct QuickAddSheet: View {
                 }
             }
             .navigationTitle("新しい予定")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル", systemImage: "xmark") {

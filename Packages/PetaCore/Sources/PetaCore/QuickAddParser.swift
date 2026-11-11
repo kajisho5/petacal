@@ -45,7 +45,7 @@ public enum QuickAddParser {
         // The earliest date expression.
         var best: NSRange?
         for pattern in datePatterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern + weekdayTail + "(?:の|に|は)?") else { continue }
+            guard let regex = try? NSRegularExpression(pattern: "(?:" + pattern + ")" + weekdayTail + "(?:の|に|は)?") else { continue }
             let all = NSRange(location: 0, length: (text as NSString).length)
             if let match = regex.firstMatch(in: text, range: all),
                best == nil || match.range.location < best!.location {

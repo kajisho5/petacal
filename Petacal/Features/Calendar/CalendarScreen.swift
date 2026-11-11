@@ -24,14 +24,18 @@ enum MonthPattern: String, CaseIterable, Identifiable {
 enum CalendarSheet: Identifiable {
     case day(DayKey)
     case event(EventItem)
-    case new(Date)
+    /// The quick-add sheet. `allDay` is true when it was opened from a day in the month view.
+    case new(Date, allDay: Bool)
+    /// The system edit screen, continuing from what the quick-add sheet has.
+    case compose(QuickDraft)
     case edit(EventItem)
 
     var id: String {
         switch self {
         case .day(let day): "day-\(day.year)-\(day.month)-\(day.day)"
         case .event(let item): "event-\(item.id)"
-        case .new(let date): "new-\(date.timeIntervalSince1970)"
+        case .new(let date, let allDay): "new-\(date.timeIntervalSince1970)-\(allDay)"
+        case .compose(let draft): "compose-\(draft.id)"
         case .edit(let item): "edit-\(item.id)"
         }
     }
@@ -50,6 +54,8 @@ struct CalendarScreen: View {
     @AppStorage("calendar.pattern") private var patternRaw = MonthPattern.bars.rawValue
     @State private var focus = DayKey(date: Date(), calendar: .current)
     @State private var sheet: CalendarSheet?
+    /// Bumped on each long press, for the haptic tap.
+    @State private var pressCount = 0
 
     private var calendar: Calendar { store.calendar }
     private var today: DayKey { DayKey(date: Date(), calendar: calendar) }
@@ -101,7 +107,7 @@ struct CalendarScreen: View {
                 Button("次へ", systemImage: "chevron.forward") { move(by: 1) }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("予定を追加", systemImage: "plus") { sheet = .new(newEventStart(on: focus)) }
+                Button("予定を追加", systemImage: "plus") { sheet = .new(newEventStart(on: focus), allDay: false) }
                     .buttonStyle(.borderedProminent)
                     .disabled(store.access != .granted)
             }
@@ -113,17 +119,20 @@ struct CalendarScreen: View {
             case .event(let item):
                 NavigationStack { EventDetailView(item: item, sheet: $sheet, showsClose: true) }
                     .presentationDetents([.medium, .large])
-            case .new(let date):
-                EventEditor(store: store.eventStore, event: nil, start: date) { store.reload(); sheet = nil }
+            case .new(let date, let allDay):
+                QuickAddSheet(start: date, allDay: allDay, sheet: $sheet)
+            case .compose(let draft):
+                EventEditor(store: store.eventStore, event: store.makeEvent(from: draft)) { store.reload(); sheet = nil }
                     .ignoresSafeArea()
             case .edit(let item):
-                EventEditor(store: store.eventStore, event: store.ekEvent(for: item), start: item.start) {
+                EventEditor(store: store.eventStore, event: store.ekEvent(for: item)) {
                     store.reload()
                     sheet = nil
                 }
                     .ignoresSafeArea()
             }
         }
+        .sensoryFeedback(.impact(weight: .medium), trigger: pressCount)
         .task(id: month) { loadAround() }
         .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged).receive(on: RunLoop.main)) { _ in
             store.reload()
@@ -139,15 +148,16 @@ struct CalendarScreen: View {
             case .month:
                 if pattern == .dots {
                     MonthDotsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
-                                  today: today, focus: $focus, sheet: $sheet)
+                                  today: today, focus: $focus, sheet: $sheet) { addAllDay(on: $0) }
                 } else {
                     MonthBarsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
-                                  today: today) { sheet = .day($0) }
+                                  today: today) { sheet = .day($0) } onLongPress: { addAllDay(on: $0) }
                 }
             case .week:
-                TimelineScreen(days: focus.week(calendar: calendar), today: today, focus: $focus, sheet: $sheet)
+                TimelineScreen(days: focus.week(calendar: calendar), today: today, focus: $focus, sheet: $sheet,
+                               pressCount: $pressCount)
             case .day:
-                TimelineScreen(days: [focus], today: today, focus: $focus, sheet: $sheet)
+                TimelineScreen(days: [focus], today: today, focus: $focus, sheet: $sheet, pressCount: $pressCount)
             }
         }
         .simultaneousGesture(
@@ -169,6 +179,13 @@ struct CalendarScreen: View {
         case .week: focus = focus.adding(days: 7 * step, calendar: calendar)
         case .day: focus = focus.adding(days: step, calendar: calendar)
         }
+    }
+
+    /// Long press on a day: a new all-day event on that day.
+    private func addAllDay(on day: DayKey) {
+        guard store.access == .granted, let date = day.date(calendar: calendar) else { return }
+        pressCount += 1
+        sheet = .new(date, allDay: true)
     }
 
     /// Loads the month on screen plus the weeks around it (week view can reach into the next month).

@@ -24,6 +24,17 @@ struct CalendarInfo: Identifiable, Equatable {
     let title: String
     let color: RGB
     let account: String
+    var writable = true
+}
+
+/// What the quick-add sheet has collected so far.
+struct QuickDraft: Identifiable, Equatable {
+    let id = UUID()
+    var title: String
+    var start: Date
+    var end: Date
+    var isAllDay: Bool
+    var calendarID: String?
 }
 
 /// Reads and writes the calendars registered on the device (EventKit is the source of truth).
@@ -51,6 +62,12 @@ final class CalendarStore {
         isSample = true
         access = .granted
         events = sample.sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
+        var seen: [String: CalendarInfo] = [:]
+        for item in sample where seen[item.calendarID] == nil {
+            seen[item.calendarID] = CalendarInfo(id: item.calendarID, title: item.calendarTitle,
+                                                 color: item.calendarColor, account: "")
+        }
+        calendars = seen.values.sorted { $0.title < $1.title }
     }
 
     static func currentAccess() -> Access {
@@ -89,12 +106,44 @@ final class CalendarStore {
         }
         calendars = eventStore.calendars(for: .event)
             .map { CalendarInfo(id: $0.calendarIdentifier, title: $0.title,
-                                color: CalendarStore.rgb($0.cgColor), account: $0.source?.title ?? "") }
+                                color: CalendarStore.rgb($0.cgColor), account: $0.source?.title ?? "",
+                                writable: $0.allowsContentModifications) }
             .sorted { ($0.account, $0.title) < ($1.account, $1.title) }
         guard let range else { return }
         let predicate = eventStore.predicateForEvents(withStart: range.from, end: range.to, calendars: nil)
         events = eventStore.events(matching: predicate).map(CalendarStore.item)
             .sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
+    }
+
+    var writableCalendars: [CalendarInfo] { calendars.filter(\.writable) }
+
+    /// The calendar new events go to unless the person picks another one.
+    var defaultCalendarID: String? {
+        if isSample { return calendars.first?.id }
+        let preferred = eventStore.defaultCalendarForNewEvents?.calendarIdentifier
+        return writableCalendars.contains { $0.id == preferred } ? preferred : writableCalendars.first?.id
+    }
+
+    /// An unsaved EventKit event filled from a draft (for saving, or for the system edit screen).
+    func makeEvent(from draft: QuickDraft) -> EKEvent {
+        let event = EKEvent(eventStore: eventStore)
+        event.title = draft.title
+        event.isAllDay = draft.isAllDay
+        event.startDate = draft.isAllDay ? calendar.startOfDay(for: draft.start) : draft.start
+        event.endDate = draft.isAllDay ? calendar.startOfDay(for: max(draft.start, draft.end)) : max(draft.start, draft.end)
+        event.calendar = eventStore.calendars(for: .event).first { $0.calendarIdentifier == draft.calendarID }
+            ?? eventStore.defaultCalendarForNewEvents
+        return event
+    }
+
+    /// Saves a draft and returns the new event's identifier.
+    @discardableResult
+    func add(_ draft: QuickDraft) throws -> String? {
+        guard !isSample else { return nil }
+        let event = makeEvent(from: draft)
+        try eventStore.save(event, span: .thisEvent, commit: true)
+        reload()
+        return event.eventIdentifier
     }
 
     /// The EventKit object behind an item (for the system edit screen).

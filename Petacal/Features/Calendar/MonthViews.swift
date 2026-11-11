@@ -6,6 +6,7 @@ struct MonthBarsView: View {
     let grid: MonthGrid
     let today: DayKey
     let onTap: (DayKey) -> Void
+    let onLongPress: (DayKey) -> Void
 
     @Environment(CalendarStore.self) private var store
     @ScaledMetric(relativeTo: .caption2) private var laneHeight: CGFloat = 20
@@ -28,7 +29,8 @@ struct MonthBarsView: View {
                         MonthWeekRow(days: days, today: today,
                                      bars: MonthBarLayout.layout(items: items, days: days, maxLanes: lanes),
                                      lookup: lookup, lanes: lanes, laneHeight: laneHeight,
-                                     numberHeight: numberHeight, columnWidth: geo.size.width / 7, onTap: onTap)
+                                     numberHeight: numberHeight, columnWidth: geo.size.width / 7,
+                                     onTap: onTap, onLongPress: onLongPress)
                             .frame(height: rowHeight)
                     }
                 }
@@ -63,6 +65,7 @@ private struct MonthWeekRow: View {
     let numberHeight: CGFloat
     let columnWidth: CGFloat
     let onTap: (DayKey) -> Void
+    let onLongPress: (DayKey) -> Void
 
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
@@ -101,9 +104,16 @@ private struct MonthWeekRow: View {
             HStack(spacing: 0) {
                 ForEach(Array(days.enumerated()), id: \.offset) { _, day in
                     if let day {
-                        Button { onTap(day) } label: { Color.clear.contentShape(Rectangle()) }
-                            .buttonStyle(.plain)
+                        // Tap opens the day; long press adds an event (also offered as a VoiceOver action and by ＋).
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { onTap(day) }
+                            .onLongPressGesture(minimumDuration: 0.4) { onLongPress(day) }
+                            .accessibilityElement()
                             .accessibilityLabel(Text(verbatim: label(for: day)))
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { onTap(day) }
+                            .accessibilityAction(named: Text("予定を追加")) { onLongPress(day) }
                     } else {
                         Color.clear
                     }
@@ -179,6 +189,7 @@ struct MonthDotsView: View {
     let today: DayKey
     @Binding var focus: DayKey
     @Binding var sheet: CalendarSheet?
+    let onLongPress: (DayKey) -> Void
 
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
@@ -203,7 +214,7 @@ struct MonthDotsView: View {
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                 DayEventList(day: focus) { sheet = .event($0) } onAdd: {
-                    sheet = .new((focus.date(calendar: store.calendar) ?? Date()).addingTimeInterval(9 * 3600))
+                    sheet = .new((focus.date(calendar: store.calendar) ?? Date()).addingTimeInterval(9 * 3600), allDay: false)
                 }
             }
             .padding(.horizontal)
@@ -213,27 +224,30 @@ struct MonthDotsView: View {
 
     private func dotCell(_ day: DayKey) -> some View {
         let items = store.events(on: day)
-        return Button { focus = day } label: {
-            VStack(spacing: 3) {
-                DayNumber(day: day, isToday: day == today)
-                    .frame(height: 26)
-                    .overlay {
-                        if day == focus && day != today {
-                            Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5)
-                        }
-                    }
-                HStack(spacing: 3) {
-                    ForEach(Array(items.prefix(3).enumerated()), id: \.offset) { _, item in
-                        Circle().fill(colors.color(for: item, scheme: scheme)).frame(width: 6, height: 6)
+        let traits: AccessibilityTraits = day == focus ? [.isButton, .isSelected] : [.isButton]
+        return VStack(spacing: 3) {
+            DayNumber(day: day, isToday: day == today)
+                .frame(height: 26)
+                .overlay {
+                    if day == focus && day != today {
+                        Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5)
                     }
                 }
-                .frame(height: 6)
+            HStack(spacing: 3) {
+                ForEach(Array(items.prefix(3).enumerated()), id: \.offset) { _, item in
+                    Circle().fill(colors.color(for: item, scheme: scheme)).frame(width: 6, height: 6)
+                }
             }
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .contentShape(Rectangle())
+            .frame(height: 6)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .contentShape(Rectangle())
+        .onTapGesture { focus = day }
+        .onLongPressGesture(minimumDuration: 0.4) { onLongPress(day) }
+        .accessibilityElement()
         .accessibilityLabel(Text(verbatim: "\(day.month)月\(day.day)日 予定\(items.count)件"))
-        .accessibilityAddTraits(day == focus ? .isSelected : [])
+        .accessibilityAddTraits(traits)
+        .accessibilityAction { focus = day }
+        .accessibilityAction(named: Text("予定を追加")) { onLongPress(day) }
     }
 }

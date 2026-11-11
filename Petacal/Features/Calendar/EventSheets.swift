@@ -40,7 +40,7 @@ struct DaySheet: View {
 
     private func add() {
         let base = day.date(calendar: store.calendar) ?? Date()
-        sheet = .new(base.addingTimeInterval(9 * 3600))
+        sheet = .new(base.addingTimeInterval(9 * 3600), allDay: false)
     }
 }
 
@@ -197,21 +197,12 @@ struct EventDetailView: View {
 struct EventEditor: UIViewControllerRepresentable {
     let store: EKEventStore
     let event: EKEvent?
-    let start: Date
     let onDone: () -> Void
 
     func makeUIViewController(context: Context) -> EKEventEditViewController {
         let controller = EKEventEditViewController()
         controller.eventStore = store
-        if let event {
-            controller.event = event
-        } else {
-            let new = EKEvent(eventStore: store)
-            new.startDate = start
-            new.endDate = start.addingTimeInterval(3600)
-            new.calendar = store.defaultCalendarForNewEvents
-            controller.event = new
-        }
+        if let event { controller.event = event }
         controller.editViewDelegate = context.coordinator
         return controller
     }

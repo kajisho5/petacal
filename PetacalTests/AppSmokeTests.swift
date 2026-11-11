@@ -44,6 +44,35 @@ import Testing
         #expect(try store.add(draft) == nil)   // sample stores never write to the device
     }
 
+    @Test func hidingACalendarHidesItsEvents() {
+        func item(_ id: String, _ calendarID: String) -> EventItem {
+            EventItem(id: "\(id)|0", eventIdentifier: id, title: id, start: Date(timeIntervalSince1970: 0),
+                      end: Date(timeIntervalSince1970: 3600), isAllDay: false, calendarID: calendarID,
+                      calendarTitle: calendarID, calendarColor: RGB(red: 0, green: 0.5, blue: 1), location: nil)
+        }
+        let store = CalendarStore(sample: [item("a", "仕事"), item("b", "家族")])
+        #expect(store.events.count == 2)
+        store.setVisible("家族", false)
+        #expect(store.events.map(\.eventIdentifier) == ["a"])
+        #expect(store.writableCalendars.map(\.id) == ["仕事"])
+        #expect(store.calendars.count == 2)      // still listed, so it can be switched back on
+        store.setVisible("家族", true)
+        #expect(store.events.count == 2)
+    }
+
+    @Test func recordsAddUpByDay() {
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))
+        let records = [
+            Record(day: day, kind: .balance, title: "入金", amount: 5400),
+            Record(day: day, kind: .oshi, title: "買い物", amount: -1200),
+            Record(day: day, kind: .free, title: "メモ", amount: 999),   // memo-only records never count
+        ]
+        #expect(records.totalsByDay(calendar: calendar) == [DayKey(date: day, calendar: calendar): 4200])
+        #expect(records[2].countedAmount == nil)
+        #expect(Record(day: day, kind: .balance, category: "食費").displayTitle == "食費")
+    }
+
     @Test func eventDaysAndMinutes() {
         let store = CalendarStore()
         let calendar = store.calendar

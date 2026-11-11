@@ -1,5 +1,6 @@
 import Foundation
 import PetaCore
+import SwiftData
 import SwiftUI
 import Testing
 import UIKit
@@ -52,6 +53,35 @@ import UIKit
         return items
     }
 
+    /// Fictional records in the current month and the two before it.
+    private static func sampleContainer() throws -> ModelContainer {
+        let container = try ModelContainer(for: Record.self, RecordPhoto.self,
+                                           configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let first = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
+        func day(_ offset: Int, monthsBack: Int = 0) -> Date {
+            let base = calendar.date(byAdding: .month, value: -monthsBack, to: first)!
+            return calendar.date(byAdding: .day, value: offset, to: base)!
+        }
+        let samples: [Record] = [
+            Record(day: day(2), kind: .oshi, title: "ソラマメーズ 新譜を購入", category: "ライブ・音楽", amount: -3300),
+            Record(day: day(6), kind: .balance, title: "フリマの売り上げ", category: "副収入", amount: 3200),
+            Record(day: day(7), kind: .balance, title: "まとめ買い", category: "食費", amount: -2000),
+            Record(day: day(calendar.component(.day, from: today) - 1), kind: .balance, title: "ポイント還元",
+                   category: "副収入", amount: 5400),
+            Record(day: day(calendar.component(.day, from: today) - 1), kind: .free, title: "公園を散歩", memo: "紅葉がきれいだった"),
+            Record(day: day(13), kind: .balance, title: "家電の買い替え", category: "日用品", amount: -8800),
+            Record(day: day(18), kind: .oshi, title: "遠征の交通費", category: "ライブ・音楽", amount: -8800),
+            Record(day: day(4, monthsBack: 1), kind: .balance, title: "副業の入金", category: "副収入", amount: 12000),
+            Record(day: day(9, monthsBack: 1), kind: .balance, title: "食材", category: "食費", amount: -4300),
+            Record(day: day(3, monthsBack: 2), kind: .balance, title: "修理代", category: "日用品", amount: -6500),
+        ]
+        for record in samples { container.mainContext.insert(record) }
+        try container.mainContext.save()
+        return container
+    }
+
     private func shoot(_ name: String, mode: CalendarMode, pattern: MonthPattern = .bars,
                        style: UIUserInterfaceStyle = .dark) async throws {
         UserDefaults.standard.set(mode.rawValue, forKey: "calendar.mode")
@@ -60,10 +90,14 @@ import UIKit
     }
 
     private func render(_ name: String, style: UIUserInterfaceStyle, view: AnyView) async throws {
-        let colors = ColorStore(defaults: UserDefaults(suiteName: "petacal-tests-shots")!)
+        let defaults = UserDefaults(suiteName: "petacal-tests-shots")!
+        defaults.removePersistentDomain(forName: "petacal-tests-shots")
+        let container = try ScreenshotTests.sampleContainer()
         let root = view
             .environment(CalendarStore(sample: ScreenshotTests.sample()))
-            .environment(colors)
+            .environment(ColorStore(defaults: defaults))
+            .environment(LockGate(defaults: defaults))
+            .modelContainer(container)
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let frame = CGRect(x: 0, y: 0, width: 402, height: 874)
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: frame)
@@ -87,6 +121,15 @@ import UIKit
     @Test func monthDots() async throws { try await shoot("month-dots-dark", mode: .month, pattern: .dots) }
     @Test func week() async throws { try await shoot("week-dark", mode: .week) }
     @Test func day() async throws { try await shoot("day-light", mode: .day, style: .light) }
+
+    @Test func recordsAndStats() async throws {
+        try await render("records-light", style: .light, view: AnyView(NavigationStack { RecordsScreen() }))
+        try await render("stats-dark", style: .dark, view: AnyView(NavigationStack { StatsScreen() }))
+        try await render("stats-light", style: .light, view: AnyView(NavigationStack { StatsScreen() }))
+        try await render("record-editor-dark", style: .dark, view: AnyView(
+            RecordEditor(target: .new(Calendar.current.startOfDay(for: Date())))))
+        try await render("settings-calendars-light", style: .light, view: AnyView(NavigationStack { VisibleCalendarsScreen() }))
+    }
 
     @Test func quickAdd() async throws {
         let start = Calendar.current.startOfDay(for: Date())

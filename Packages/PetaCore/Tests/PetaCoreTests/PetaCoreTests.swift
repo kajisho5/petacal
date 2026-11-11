@@ -416,3 +416,28 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(parse("").title == "")
     }
 }
+
+@Suite struct ChartSeriesTests {
+    private let amounts: [(day: DayKey, amount: Int)] = [
+        (DayKey(year: 2026, month: 11, day: 3), -3300), (DayKey(year: 2026, month: 11, day: 7), 3200),
+        (DayKey(year: 2026, month: 11, day: 7), -1000), (DayKey(year: 2026, month: 10, day: 30), 500),
+        (DayKey(year: 2026, month: 9, day: 1), -200),
+    ]
+
+    @Test func dailyCoversEveryDayAndRunsATotal() {
+        let series = ChartSeries.daily(amounts, year: 2026, month: 11, dayCount: 30)
+        #expect(series.count == 30)
+        #expect(series[2] == DayAmount(day: 3, total: -3300, cumulative: -3300))
+        #expect(series[6] == DayAmount(day: 7, total: 2200, cumulative: -1100))
+        #expect(series[29].cumulative == -1100)
+        #expect(ChartSeries.daily([], year: 2026, month: 11, dayCount: 0).isEmpty)
+    }
+
+    @Test func monthlyGoesBackAcrossYears() {
+        let series = ChartSeries.monthly(amounts, endYear: 2026, endMonth: 11, months: 3)
+        #expect(series.map(\.month) == [9, 10, 11])
+        #expect(series.map(\.total) == [-200, 500, -1100])
+        let wrap = ChartSeries.monthly([], endYear: 2026, endMonth: 1, months: 2)
+        #expect(wrap.map { "\($0.year)-\($0.month)" } == ["2025-12", "2026-1"])
+    }
+}

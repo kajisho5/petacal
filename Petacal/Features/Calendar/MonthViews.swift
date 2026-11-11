@@ -5,6 +5,8 @@ import SwiftUI
 struct MonthBarsView: View {
     let grid: MonthGrid
     let today: DayKey
+    /// The day's money in and out added up (empty while records are locked).
+    var amounts: [DayKey: Int] = [:]
     let onTap: (DayKey) -> Void
     let onLongPress: (DayKey) -> Void
 
@@ -17,7 +19,7 @@ struct MonthBarsView: View {
             let headerHeight: CGFloat = 24
             let minimum = numberHeight + laneHeight * 2 + 4
             let rowHeight = max(minimum, (geo.size.height - headerHeight) / CGFloat(max(grid.weeks.count, 1)))
-            let lanes = max(1, min(5, Int((rowHeight - numberHeight - laneHeight * 0.8) / laneHeight)))
+            let lanes = max(1, min(5, Int((rowHeight - numberHeight - laneHeight * 1.6) / laneHeight)))
             let items = store.spanItems
             let lookup = Dictionary(store.events.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             ScrollView {
@@ -30,7 +32,7 @@ struct MonthBarsView: View {
                                      bars: MonthBarLayout.layout(items: items, days: days, maxLanes: lanes),
                                      lookup: lookup, lanes: lanes, laneHeight: laneHeight,
                                      numberHeight: numberHeight, columnWidth: geo.size.width / 7,
-                                     onTap: onTap, onLongPress: onLongPress)
+                                     amounts: amounts, onTap: onTap, onLongPress: onLongPress)
                             .frame(height: rowHeight)
                     }
                 }
@@ -64,6 +66,7 @@ private struct MonthWeekRow: View {
     let laneHeight: CGFloat
     let numberHeight: CGFloat
     let columnWidth: CGFloat
+    let amounts: [DayKey: Int]
     let onTap: (DayKey) -> Void
     let onLongPress: (DayKey) -> Void
 
@@ -100,6 +103,27 @@ private struct MonthWeekRow: View {
                         .offset(x: CGFloat(column) * columnWidth, y: numberHeight + CGFloat(lanes) * laneHeight)
                 }
             }
+            // The day's amount at the bottom of the cell, always with its sign.
+            HStack(spacing: 0) {
+                ForEach(Array(days.enumerated()), id: \.offset) { _, day in
+                    Group {
+                        if let day, let amount = amounts[day] {
+                            Text(verbatim: Yen.signed(amount, unit: false))
+                                .font(.caption2.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.amount(amount))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .padding(.horizontal, 2)
+                        } else {
+                            Color.clear
+                        }
+                    }
+                    .frame(width: columnWidth, height: laneHeight * 0.8)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .accessibilityHidden(true)
             // One tap target per day, on top of everything.
             HStack(spacing: 0) {
                 ForEach(Array(days.enumerated()), id: \.offset) { _, day in
@@ -132,6 +156,7 @@ private struct MonthWeekRow: View {
         if day == today { text += " 今日" }
         let titles = store.events(on: day).map(\.title)
         text += titles.isEmpty ? " " + String(localized: "予定なし") : " 予定\(titles.count)件 " + titles.prefix(3).joined(separator: "、")
+        if let amount = amounts[day] { text += " 収支 \(Yen.signed(amount))" }
         return text
     }
 }
@@ -213,9 +238,7 @@ struct MonthDotsView: View {
                 Text(verbatim: store.heading(focus, today: today))
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
-                DayEventList(day: focus) { sheet = .event($0) } onAdd: {
-                    sheet = .new((focus.date(calendar: store.calendar) ?? Date()).addingTimeInterval(9 * 3600), allDay: false)
-                }
+                DayContents(day: focus, sheet: $sheet) { sheet = .event($0) }
             }
             .padding(.horizontal)
             .padding(.bottom, 24)

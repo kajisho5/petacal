@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.3.0"
+    MARKETING_VERSION: "0.4.0"
     CURRENT_PROJECT_VERSION: "1"
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
     SWIFT_EMIT_LOC_STRINGS: YES
@@ -35,6 +35,7 @@ targets:
         CFBundleDevelopmentRegion: ja
         ITSAppUsesNonExemptEncryption: false
         NSCalendarsFullAccessUsageDescription: 端末のカレンダーの予定を表示・追加するために使います。
+        NSFaceIDUsageDescription: 記録のロックを解除するために Face ID を使います。
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true

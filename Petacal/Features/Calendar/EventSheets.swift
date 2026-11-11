@@ -1,6 +1,7 @@
 import EventKit
 import EventKitUI
 import PetaCore
+import SwiftData
 import SwiftUI
 
 /// The sheet that opens when a day is tapped in the month view.
@@ -16,7 +17,7 @@ struct DaySheet: View {
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
-                DayEventList(day: day) { path.append($0) } onAdd: { add() }
+                DayContents(day: day, sheet: $sheet) { path.append($0) }
                     .padding(.horizontal)
                     .padding(.bottom, 24)
             }
@@ -27,8 +28,15 @@ struct DaySheet: View {
                     Button("閉じる", systemImage: "xmark") { sheet = nil }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("予定を追加", systemImage: "plus") { add() }
-                        .disabled(store.access != .granted)
+                    Menu {
+                        Button("予定を追加", systemImage: "calendar.badge.plus") { add() }
+                            .disabled(store.access != .granted)
+                        Button("記録を追加", systemImage: "square.and.pencil") {
+                            sheet = .record(.new(day.date(calendar: store.calendar) ?? Date()))
+                        }
+                    } label: {
+                        Label("追加", systemImage: "plus")
+                    }
                 }
             }
             .navigationDestination(for: EventItem.self) { item in
@@ -44,39 +52,83 @@ struct DaySheet: View {
     }
 }
 
-/// The events of one day as a card, or the empty state.
-struct DayEventList: View {
+/// Everything on one day: events, then records. Shows the empty state when there is neither.
+struct DayContents: View {
     let day: DayKey
-    let onSelect: (EventItem) -> Void
-    let onAdd: () -> Void
+    @Binding var sheet: CalendarSheet?
+    let onSelectEvent: (EventItem) -> Void
 
     @Environment(CalendarStore.self) private var store
+    @Environment(LockGate.self) private var lock
+    @Query private var records: [Record]
+
+    var body: some View {
+        let events = store.events(on: day)
+        let dayRecords = records.on(day, calendar: store.calendar)
+        VStack(alignment: .leading, spacing: 16) {
+            if events.isEmpty && dayRecords.isEmpty {
+                ContentUnavailableView {
+                    Label("この日はまだ何もありません", systemImage: "calendar")
+                } actions: {
+                    if store.access == .granted {
+                        Button("予定を追加") {
+                            let base = day.date(calendar: store.calendar) ?? Date()
+                            sheet = .new(base.addingTimeInterval(9 * 3600), allDay: false)
+                        }
+                    }
+                    Button("記録を追加") { sheet = .record(.new(day.date(calendar: store.calendar) ?? Date())) }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            if !events.isEmpty {
+                DayEventList(items: events, onSelect: onSelectEvent)
+            }
+            if !dayRecords.isEmpty {
+                Text("記録").font(.footnote).foregroundStyle(.secondary).padding(.leading, 16)
+                if lock.isLocked {
+                    Label("記録 \(dayRecords.count)件（ロック中）", systemImage: "lock")
+                        .foregroundStyle(.secondary)
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(dayRecords.enumerated()), id: \.element.id) { index, record in
+                            if index > 0 { Divider().padding(.leading, 16) }
+                            Button { sheet = .record(.edit(record)) } label: {
+                                RecordRow(record: record)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+                }
+            }
+        }
+    }
+}
+
+/// The events of one day as a card.
+struct DayEventList: View {
+    let items: [EventItem]
+    let onSelect: (EventItem) -> Void
+
     @Environment(ColorStore.self) private var colors
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let items = store.events(on: day)
-        if items.isEmpty {
-            ContentUnavailableView {
-                Label("この日はまだ何もありません", systemImage: "calendar")
-            } actions: {
-                if store.access == .granted {
-                    Button("予定を追加", action: onAdd)
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 { Divider().padding(.leading, 16) }
+                Button { onSelect(item) } label: {
+                    EventRow(item: item, color: colors.color(for: item, scheme: scheme))
                 }
+                .buttonStyle(.plain)
             }
-            .frame(maxWidth: .infinity)
-        } else {
-            VStack(spacing: 0) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    if index > 0 { Divider().padding(.leading, 16) }
-                    Button { onSelect(item) } label: {
-                        EventRow(item: item, color: colors.color(for: item, scheme: scheme))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
         }
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 

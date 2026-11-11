@@ -2,6 +2,8 @@ import PetaCore
 import SwiftUI
 
 struct SettingsScreen: View {
+    @Environment(LockGate.self) private var lock
+
     private var version: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "-"
@@ -12,13 +14,23 @@ struct SettingsScreen: View {
     var body: some View {
         List {
             Section("表示") {
+                NavigationLink("表示するカレンダー") { VisibleCalendarsScreen() }
                 NavigationLink("カレンダーの表示") { PatternSettingsScreen() }
                 NavigationLink("色分け") { ColorSettingsScreen() }
             }
             Section {
+                Toggle("記録をロック", isOn: Binding(
+                    get: { lock.isEnabled },
+                    set: { value in Task { await lock.setEnabled(value) } }))
+            } header: {
+                Text("記録")
+            } footer: {
+                Text("オンにすると、記録・金額・集計は Face ID／Touch ID／パスコードで解除するまで隠れます。予定はそのまま見られます。アプリを閉じると、もう一度ロックされます。")
+            }
+            Section {
                 LabeledContent("バージョン", value: version)
             } footer: {
-                Text("端末のカレンダーの予定を表示・追加できるバージョンです。記録の機能はこのあと追加します。")
+                Text("記録は今はこの iPhone の中だけに保存されます。iCloud でほかの端末とそろえる機能は、このあと追加します。")
             }
         }
         .navigationTitle("設定")
@@ -146,5 +158,55 @@ private struct ColorPickerSheet: View {
                 loaded = true
             }
         }
+    }
+}
+
+/// 設定 → 表示するカレンダー: which of the calendars registered on the device show up in this app.
+struct VisibleCalendarsScreen: View {
+    @Environment(CalendarStore.self) private var store
+    @Environment(ColorStore.self) private var colors
+    @Environment(\.colorScheme) private var scheme
+
+    private var accounts: [(name: String, calendars: [CalendarInfo])] {
+        Dictionary(grouping: store.calendars, by: \.account)
+            .map { (name: $0.key, calendars: $0.value) }
+            .sorted { $0.name < $1.name }
+    }
+
+    var body: some View {
+        List {
+            if store.calendars.isEmpty {
+                Text(store.access == .granted
+                     ? "カレンダーがありません。"
+                     : "カレンダーへのアクセスを許可すると、ここにカレンダーが並びます。")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(accounts, id: \.name) { account in
+                Section {
+                    ForEach(account.calendars) { info in
+                        Toggle(isOn: Binding(
+                            get: { store.isVisible(info.id) },
+                            set: { store.setVisible(info.id, $0) })) {
+                            HStack(spacing: 12) {
+                                Circle().fill(colors.color(for: info, scheme: scheme)).frame(width: 14, height: 14)
+                                Text(verbatim: info.title)
+                            }
+                        }
+                    }
+                } header: {
+                    Text(verbatim: account.name.isEmpty ? String(localized: "この iPhone") : account.name)
+                }
+            }
+            if !store.calendars.isEmpty {
+                Section {
+                    Button("すべて表示") { store.calendars.forEach { store.setVisible($0.id, true) } }
+                } footer: {
+                    Text("オフにしたカレンダーの予定は、このアプリに出なくなります（元のカレンダーからは消えません）。カレンダーやアカウントの追加・削除は、iPhone の「設定」アプリのカレンダーの項目で行います。")
+                }
+            }
+        }
+        .navigationTitle("表示するカレンダー")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { store.reload() }
     }
 }

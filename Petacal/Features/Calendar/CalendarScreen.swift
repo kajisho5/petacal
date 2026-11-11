@@ -104,6 +104,8 @@ struct CalendarScreen: View {
                 content
             }
         }
+        // The keyboard of a sheet on top must not squeeze the calendar underneath.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .navigationTitle(Text(verbatim: title))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

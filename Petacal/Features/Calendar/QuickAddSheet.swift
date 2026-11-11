@@ -135,6 +135,10 @@ struct QuickAddSheet: View {
         .onAppear {
             if calendarID == nil { calendarID = store.defaultCalendarID }
             apply(parsed)
+        }
+        .task {
+            // Bring up the keyboard after the sheet has finished rising, so the two do not fight.
+            try? await Task.sleep(for: .milliseconds(450))
             titleFocused = true
         }
         .onChange(of: text) { _, _ in apply(parsed) }

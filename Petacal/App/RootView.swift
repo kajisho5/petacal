@@ -17,6 +17,7 @@ struct RootView: View {
                 NavigationStack { SettingsScreen() }
             }
         }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
 }
 

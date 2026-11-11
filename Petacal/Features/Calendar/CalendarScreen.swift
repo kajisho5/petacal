@@ -327,12 +327,16 @@ private struct DaySidePane: View {
 /// Reads where the fold of a foldable iPhone crosses a view (iOS 27.1 and later; nil everywhere else).
 enum FoldReader {
     static func fold(in proxy: GeometryProxy) -> FoldRegion? {
-        guard #available(iOS 27.1, macOS 27.1, *) else { return nil }
+        #if os(iOS)
+        guard #available(iOS 27.1, *) else { return nil }
         // Inactive regions are included so the split is already at the fold before the device is folded.
         let regions = proxy.reservedRegions(kind: .division, options: .includeInactive)
         // Only a fold that runs top to bottom splits the screen into left and right.
         guard let region = regions.first(where: { $0.frame.height >= $0.frame.width }) else { return nil }
         return FoldRegion(minX: region.frame.minX, maxX: region.frame.maxX, isActive: region.isActive)
+        #else
+        return nil
+        #endif
     }
 }
 

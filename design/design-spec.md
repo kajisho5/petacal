@@ -251,7 +251,7 @@ petacal/
   3. 予定1件ごと（S-02 の予定のシートに「色」の行を足す）。選ばなければカレンダーの色。
 - **選び方**：一覧で行をタップ → 色のシート（50個の丸）→ タップで選ぶ → 右上の完了。シートの下に、月の帯になったときの見本と「最初の色に戻す」（カレンダーは「元の色に戻す」）。
 - **保存先**：選んだ色はこのアプリの中に保存し、iCloud で全端末にそろえます。元のカレンダー（Google など）の色は書き換えません。
-  - 事実：端末のカレンダーの仕組み（EventKit）では、カレンダーの色（`EKCalendar.cgColor`）は読み書きできます。
+  - 事実：端末のカレンダーの仕組み（EventKit）では、カレンダーの色（`EKCalendar.cgColor`）は読み書きできます [A6]。
   - 確認できた範囲：予定1件ごとの色を持つ項目は、読んだ資料（`EKCalendarItem` の一覧。一部のみ表示）には見当たりません。全項目は未確認。
   - このため、予定1件ごとの色は Google カレンダー側の「予定の色」とは連動しません（Google で付けた予定の色は読めず、こちらで付けた色も Google には出ません）。
 - **色だけに頼らない**：帯には必ず題名が入り、一覧にはカレンダー名・種類の名前が出ます。収支の＋／−は記号でも示します（これまでどおり）。
@@ -469,6 +469,7 @@ S-09〜S-14 の iPad・Mac・iPhone Duo 内側での見え方：どれもシー�
 - [A3] App Store Connect ヘルプ（お試し期間の選択肢） https://developer.apple.com/help/app-store-connect/manage-subscriptions/set-up-introductory-offers-for-auto-renewable-subscriptions
 - [A4] Apple Developer「Releases」 https://developer.apple.com/news/releases/
 - [A5] Apple「Accessing the event store」 https://developer.apple.com/documentation/eventkit/accessing-the-event-store
+- [A6] Apple「EKCalendar.cgColor」（カレンダーの色は読み書きできる。2026-11-11 確認） https://developer.apple.com/documentation/eventkit/ekcalendar/cgcolor
 - [G1] Google「Sensitive scope verification」 https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification
 
 二次情報
@@ -486,4 +487,5 @@ S-09〜S-14 の iPad・Mac・iPhone Duo 内側での見え方：どれもシー�
 - App Store Small Business Program の公式ページ、各価格（500円・4,800円・9,800円）の選択肢
 - Apple Design Resources との見た目の照合、競合の公式の料金ページ
 - 「ペタカレ」の商標・App Store での重複
-- EventKit のカレンダーの色（EKCalendar.cgColor、読み書き可）: https://developer.apple.com/documentation/eventkit/ekcalendar/cgcolor （2026-11-11 確認。EKCalendarItem の項目一覧は一部のみ確認）
+
+- EventKit の予定（EKEvent／EKCalendarItem）の全項目。予定1件ごとの色の項目が無いことは、一覧の一部を見ただけで、全部は確認していない

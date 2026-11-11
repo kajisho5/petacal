@@ -14,6 +14,7 @@ struct TimelineScreen: View {
     @ScaledMetric(relativeTo: .caption2) private var hourHeight: CGFloat = 52
     @ScaledMetric(relativeTo: .caption2) private var gutter: CGFloat = 44
     @ScaledMetric(relativeTo: .caption2) private var laneHeight: CGFloat = 20
+    @ScaledMetric(relativeTo: .caption2) private var labelInset: CGFloat = 7
 
     private var isWeek: Bool { days.count > 1 }
 
@@ -35,9 +36,10 @@ struct TimelineScreen: View {
                                 }
                             }
                         }
+                        .padding(.top, labelInset)     // lines run through the middle of the hour labels
                     }
-                    .frame(height: hourHeight * 24)
-                    .padding(.vertical, 8)
+                    .frame(height: hourHeight * 24 + labelInset, alignment: .top)
+                    .padding(.bottom, 8)
                 }
                 .onAppear { proxy.scrollTo(8, anchor: .top) }
             }
@@ -100,6 +102,7 @@ struct TimelineScreen: View {
             }
         }
         .frame(height: CGFloat(lanes) * laneHeight + (lanes > 0 ? 4 : 0))
+        .clipped()
     }
 
     private var hourLabels: some View {
@@ -109,7 +112,6 @@ struct TimelineScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(width: gutter, height: hourHeight, alignment: .top)
-                    .offset(y: -6)
                     .id(hour)
             }
         }

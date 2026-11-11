@@ -153,22 +153,23 @@ struct EventBar: View {
     var capped = true
 
     var body: some View {
-        HStack(spacing: 3) {
-            if capped {
-                RoundedRectangle(cornerRadius: 1.5).fill(color).frame(width: 3)
+        // The title sits in an overlay so a long title can never widen the bar; it is cut at the bar's edge.
+        color.opacity(0.35)
+            .overlay(alignment: .leading) {
+                HStack(spacing: 3) {
+                    if capped {
+                        RoundedRectangle(cornerRadius: 1.5).fill(color).frame(width: 3)
+                    }
+                    Text(verbatim: title)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .padding(.leading, capped ? 0 : 5)
             }
-            Text(verbatim: title)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, capped ? 0 : 5)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(color.opacity(0.35))
-        .clipShape(RoundedRectangle(cornerRadius: 5))
-        .accessibilityHidden(true)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .accessibilityHidden(true)
     }
 }
 

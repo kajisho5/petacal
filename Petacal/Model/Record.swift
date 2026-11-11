@@ -113,6 +113,12 @@ extension Color {
             ? UIColor(red: 1, green: 0.41, blue: 0.38, alpha: 1) : UIColor(red: 0.77, green: 0, blue: 0.10, alpha: 1)
     })
 
+    /// Budget notices (always shown with a triangle symbol and words as well).
+    static let warnAmount = Color(uiColor: UIColor { @Sendable traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1, green: 0.70, blue: 0.25, alpha: 1) : UIColor(red: 0.54, green: 0.32, blue: 0, alpha: 1)
+    })
+
     static func amount(_ value: Int) -> Color {
         value > 0 ? .plusAmount : (value < 0 ? .minusAmount : .primary)
     }

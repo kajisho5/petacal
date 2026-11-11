@@ -173,6 +173,22 @@ final class CalendarStore {
         reload()
     }
 
+    /// Times taken by timed events (all-day events do not count), for finding free time.
+    func busyRanges(from: Date, to: Date) -> [TimeRange] {
+        let pool: [EventItem]
+        if isSample {
+            pool = sampleItems
+        } else if access == .granted {
+            pool = eventStore.events(matching: eventStore.predicateForEvents(withStart: from, end: to, calendars: nil))
+                .map(CalendarStore.item)
+        } else {
+            pool = []
+        }
+        return pool
+            .filter { !$0.isAllDay && isVisible($0.calendarID) && $0.end > from && $0.start < to }
+            .map { TimeRange(start: $0.start, end: $0.end) }
+    }
+
     /// Events from one year back to one year ahead, for searching.
     func eventsAround() -> [EventItem] {
         if isSample { return sampleItems.filter { isVisible($0.calendarID) } }

@@ -1,6 +1,8 @@
 import PetaCore
+import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// S-03 予定を取り込む（文章）: paste a message, check the events found in it, add the ones you want.
 struct ImportTextSheet: View {
@@ -15,6 +17,10 @@ struct ImportTextSheet: View {
     @State private var failed = false
     @State private var confirmDiscard = false
     @FocusState private var editing: Bool
+    @State private var pickedPhoto: PhotosPickerItem?
+    @State private var pickingFile = false
+    @State private var isReading = false
+    @State private var readFailed = false
     private let searchNow: Bool
 
     struct Candidate: Identifiable {
@@ -55,10 +61,33 @@ struct ImportTextSheet: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(!hasText)
                     }
+                    HStack {
+                        PhotosPicker(selection: $pickedPhoto, matching: .images) {
+                            Label("写真から読み取る", systemImage: "photo")
+                        }
+                        .buttonStyle(.bordered)
+                        Spacer()
+                        Button { pickingFile = true } label: { Label("ファイルから", systemImage: "doc") }
+                            .buttonStyle(.bordered)
+                    }
+                    if isReading {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("文字を読み取っています")
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                    if readFailed {
+                        Label("文字を読み取れませんでした。別の写真かファイルで試すか、文章を貼り付けてください。",
+                              systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("文章")
                 } footer: {
-                    Text("LINE やメールの文章をコピーして、「ペースト」を押します。日付が入っている文ごとに、予定の候補をつくります。")
+                    Text("LINE やメールの文章をコピーして、「ペースト」を押します。告知やチケットの写真、テキストや PDF のファイルからも読み取れます（この iPhone の中で読み取り、外には送りません）。日付が入っている文ごとに、予定の候補をつくります。")
                 }
 
                 if searched && found.isEmpty {
@@ -129,10 +158,41 @@ struct ImportTextSheet: View {
             }
         }
         .interactiveDismissDisabled(hasText)
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            Task {
+                isReading = true
+                readFailed = false
+                let data = try? await item.loadTransferable(type: Data.self)
+                let read = await data.asyncMap { await TextRecognizer.recognize($0) } ?? ""
+                isReading = false
+                pickedPhoto = nil
+                append(read)
+            }
+        }
+        .fileImporter(isPresented: $pickingFile, allowedContentTypes: [.plainText, .pdf]) { result in
+            readFailed = false
+            if case .success(let url) = result, let read = FileTextReader.text(at: url) {
+                append(read)
+            } else if case .success = result {
+                readFailed = true
+            }
+        }
         .onAppear {
             if calendarID == nil { calendarID = store.defaultCalendarID }
             if searchNow { search() }
         }
+    }
+
+    /// Adds text read from a photo or a file, then looks for events.
+    private func append(_ read: String) {
+        let cleaned = read.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else {
+            readFailed = true
+            return
+        }
+        text = text.isEmpty ? cleaned : text + "\n" + cleaned
+        search()
     }
 
     private func search() {
@@ -178,5 +238,13 @@ struct ImportTextSheet: View {
             }
         }
         if anyFailed { failed = true } else { sheet = nil }
+    }
+}
+
+private extension Optional {
+    /// `map` for async closures.
+    func asyncMap<T>(_ transform: (Wrapped) async -> T) async -> T? {
+        guard let value = self else { return nil }
+        return await transform(value)
     }
 }

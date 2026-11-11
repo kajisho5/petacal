@@ -138,6 +138,19 @@ import UIKit
     @Test func week() async throws { try await shoot("week-dark", mode: .week) }
     @Test func day() async throws { try await shoot("day-light", mode: .day, style: .light) }
 
+    @Test func extras() async throws {
+        UserDefaults.standard.set(15000, forKey: "budget.oshi")
+        try await render("stats-budget-light", style: .light, view: AnyView(NavigationStack { StatsScreen() }))
+        UserDefaults.standard.removeObject(forKey: "budget.oshi")
+        try await render("slots-light", style: .light, view: AnyView(SlotsSheet()))
+        try await render("bulk-dark", style: .dark, view: AnyView(BulkPhotosSheet()))
+        let stats = StatsCalculator.monthStats([
+            RecordAmount(kind: .balance, category: "副収入", amount: 8600), RecordAmount(kind: .balance, category: "食費", amount: -2000),
+            RecordAmount(kind: .balance, category: "日用品", amount: -8800), RecordAmount(kind: .oshi, category: "ライブ・音楽", amount: -12100),
+        ])
+        try await render("summary-light", style: .light, view: AnyView(SummarySheet(year: 2026, month: 11, stats: stats)))
+    }
+
     @Test func recordsAndStats() async throws {
         try await render("records-light", style: .light, view: AnyView(NavigationStack { RecordsScreen() }))
         try await render("stats-dark", style: .dark, view: AnyView(NavigationStack { StatsScreen() }))

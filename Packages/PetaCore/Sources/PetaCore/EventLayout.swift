@@ -81,8 +81,9 @@ public enum MonthBarLayout {
         var taken: [[Bool]] = []     // lane -> column -> used
         var segments: [BarSegment<ID>] = []
         for item in visible {
-            let from = column(of: max(item.start, first.1))
-            let to = column(of: min(item.end, last.1))
+            let a = column(of: max(item.start, first.1))
+            let b = column(of: min(item.end, last.1))
+            let from = min(a, b), to = max(a, b)
             var lane = 0
             while true {
                 if lane == taken.count { taken.append(Array(repeating: false, count: days.count)) }

@@ -60,7 +60,9 @@ struct RecordEditor: View {
 
     /// The signed amount, or nil when the field is empty or the kind has no amount.
     private var amount: Int? {
-        guard kind != .free, let value = Int(amountText.filter(\.isNumber)), value > 0 else { return nil }
+        // Full-width digits (pasted text) count too.
+        let digits = JapaneseDateParser.normalize(amountText).filter { $0.isASCII && $0.isNumber }
+        guard kind != .free, let value = Int(digits), value > 0 else { return nil }
         return (kind == .balance && isPlus) ? value : -value
     }
 
@@ -170,6 +172,10 @@ struct RecordEditor: View {
         }
         .interactiveDismissDisabled(changed && canSave)
         .onChange(of: title) { _, _ in changed = true }
+        .onChange(of: kind) { _, _ in changed = true }
+        .onChange(of: day) { _, _ in changed = true }
+        .onChange(of: category) { _, _ in changed = true }
+        .onChange(of: isPlus) { _, _ in changed = true }
         .onChange(of: amountText) { _, _ in changed = true }
         .onChange(of: memo) { _, _ in changed = true }
         .onChange(of: photos) { _, _ in changed = true }

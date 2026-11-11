@@ -441,3 +441,25 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(wrap.map { "\($0.year)-\($0.month)" } == ["2025-12", "2026-1"])
     }
 }
+
+@Suite struct ParserRegressionTests {
+    private let now = at(2026, 11, 11, 9, 41)
+
+    @Test func durationsAreNotTimes() {
+        let a = QuickAddParser.parse("会議 2時間", now: now, calendar: jst)
+        #expect(a.start == nil)
+        #expect(a.title == "会議 2時間")
+        #expect(JapaneseDateParser.parse("12日は3時間の研修", now: now, calendar: jst).first?.hour == nil)
+    }
+
+    @Test func particlesAfterDateAndTimeAreDropped() {
+        let a = QuickAddParser.parse("明日の15時の会議", now: now, calendar: jst)
+        #expect(a.title == "会議")
+        #expect(a.day == DayKey(year: 2026, month: 11, day: 12))
+        #expect(a.start == QuickAddParser.Time(hour: 15, minute: 0))
+        let b = QuickAddParser.parse("１２日 １０時半 歯医者", now: now, calendar: jst)   // full-width digits
+        #expect(b.day == DayKey(year: 2026, month: 11, day: 12))
+        #expect(b.start == QuickAddParser.Time(hour: 10, minute: 30))
+        #expect(b.title == "歯医者")
+    }
+}

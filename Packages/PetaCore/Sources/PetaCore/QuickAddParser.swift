@@ -33,7 +33,7 @@ public enum QuickAddParser {
         #"(?<![\d月])\d{1,2}日(?!間)"#,
         "明後日|あさって|明日|あした|今日|本日",
     ]
-    private static let timePattern = #"(?:(?:午前|午後|朝|夜)\s*)?\d{1,2}時(?:\d{1,2}分|半)?|(?<!\d)\d{1,2}:\d{2}(?!\d)"#
+    private static let timePattern = #"(?:(?:午前|午後|朝|夜)\s*)?\d{1,2}時(?!間)(?:\d{1,2}分|半)?|(?<!\d)\d{1,2}:\d{2}(?!\d)"#
 
     public static func parse(_ rawText: String, now: Date, calendar: Calendar) -> Result {
         var text = JapaneseDateParser.normalize(rawText)
@@ -63,7 +63,7 @@ public enum QuickAddParser {
 
         // The first time, and an end time when it follows a range mark.
         if let regex = try? NSRegularExpression(
-            pattern: "(\(timePattern))(?:\\s*[〜~ー－-]\\s*(\(timePattern)))?(?:から|より|に)?") {
+            pattern: "(\(timePattern))(?:\\s*[〜~ー－-]\\s*(\(timePattern)))?(?:から|より|に|の|は)?") {
             let ns = text as NSString
             if let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)),
                let first = JapaneseDateParser.firstTime(in: ns.substring(with: match.range(at: 1))) {

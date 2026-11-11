@@ -32,6 +32,12 @@ final class LockGate {
     }
 
     /// Turning the lock on or off always asks first, so nobody else can switch it off.
+    /// False when the iPhone has no passcode, Face ID or Touch ID to check against.
+    static var canAuthenticate: Bool {
+        var error: NSError?
+        return LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
+    }
+
     func setEnabled(_ enabled: Bool) async {
         guard enabled != isEnabled else { return }
         let reason = enabled ? String(localized: "記録のロックをオンにします。") : String(localized: "記録のロックをオフにします。")

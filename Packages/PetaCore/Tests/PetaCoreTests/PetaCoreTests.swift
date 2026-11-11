@@ -274,3 +274,94 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(moments[0].offset < moments[1].offset)
     }
 }
+
+@Suite struct ColorPaletteTests {
+    @Test func hasFiftyDistinctNamedColours() {
+        #expect(ColorPalette.presets.count == 50)
+        #expect(Set(ColorPalette.presets.map(\.light.hex)).count == 50)
+        #expect(Set(ColorPalette.presets.map(\.dark.hex)).count == 50)
+        #expect(Set(ColorPalette.presets.map(\.name)).count == 50)
+        #expect(ColorPalette.preset(35)?.name == "ピンク・あざやか")
+        #expect(ColorPalette.preset(50) == nil)
+        #expect(ColorPalette.preset(-1) == nil)
+    }
+
+    @Test func matchesTheDesignMockValues() {
+        // (family, tone) -> light, dark. Taken from design/build.py preset().
+        let expected: [(Int, Int, String, String)] = [
+            (0, 0, "#DA1B2B", "#E63746"), (2, 2, "#EEDCA0", "#F0DFA8"), (7, 0, "#D52080", "#E23C94"),
+            (8, 3, "#62422D", "#8B5D3F"), (9, 4, "#948A75", "#A29886"), (5, 1, "#4C99F0", "#68A9F3"),
+            (4, 3, "#1B8D85", "#24BCB2"), (3, 4, "#63A674", "#77B185"), (9, 0, "#717984", "#868D98"),
+            (6, 2, "#C5A6E8", "#CAAEEA"),
+        ]
+        for (family, tone, light, dark) in expected {
+            let preset = ColorPalette.presets[family * 5 + tone]
+            #expect(preset.light.hex == light)
+            #expect(preset.dark.hex == dark)
+        }
+    }
+
+    @Test func luminanceTellsLightFromDark() {
+        #expect(RGB(red: 1, green: 1, blue: 1).luminance > 0.99)
+        #expect(RGB(red: 0, green: 0, blue: 0).luminance == 0)
+        #expect(ColorPalette.presets[12].light.luminance > ColorPalette.presets[13].light.luminance)
+    }
+}
+
+@Suite struct EventLayoutTests {
+    private func d(_ day: Int) -> DayKey { DayKey(year: 2026, month: 11, day: day) }
+
+    @Test func weekHelpers() {
+        #expect(d(11).startOfWeek(calendar: jst) == d(8))
+        #expect(d(8).startOfWeek(calendar: jst) == d(8))
+        #expect(d(11).week(calendar: jst) == (8...14).map(d))
+        #expect(d(30).adding(days: 1, calendar: jst) == DayKey(year: 2026, month: 12, day: 1))
+        #expect(d(1).adding(days: -1, calendar: jst) == DayKey(year: 2026, month: 10, day: 31))
+    }
+
+    @Test func barsShareLanesAndClipToTheWeek() {
+        let days: [DayKey?] = (15...21).map { d($0) }
+        let items = [
+            SpanItem(id: "trip", start: d(19), end: d(23), sortKey: -1),
+            SpanItem(id: "meeting", start: d(18), end: d(18), sortKey: 15 * 60),
+            SpanItem(id: "paper", start: d(20), end: d(20), sortKey: 9 * 60),
+            SpanItem(id: "before", start: d(13), end: d(15), sortKey: -1),
+        ]
+        let bars = MonthBarLayout.layout(items: items, days: days, maxLanes: 3)
+        let byID = Dictionary(uniqueKeysWithValues: bars.segments.map { ($0.id, $0) })
+        #expect(byID["trip"] == BarSegment(id: "trip", lane: 0, startColumn: 4, endColumn: 6,
+                                           continuesBefore: false, continuesAfter: true))
+        #expect(byID["meeting"] == BarSegment(id: "meeting", lane: 0, startColumn: 3, endColumn: 3,
+                                              continuesBefore: false, continuesAfter: false))
+        #expect(byID["paper"]?.lane == 1)
+        #expect(byID["before"] == BarSegment(id: "before", lane: 0, startColumn: 0, endColumn: 0,
+                                             continuesBefore: true, continuesAfter: false))
+        #expect(bars.hidden == Array(repeating: 0, count: 7))
+    }
+
+    @Test func extraItemsAreCountedNotDrawn() {
+        let days: [DayKey?] = [nil, nil] + (1...5).map { d($0) }
+        let items = (0..<5).map { SpanItem(id: $0, start: d(3), end: d(3), sortKey: $0 * 60) }
+        let bars = MonthBarLayout.layout(items: items, days: days, maxLanes: 3)
+        #expect(bars.segments.map(\.id) == [0, 1, 2])
+        #expect(bars.segments.allSatisfy { $0.startColumn == 4 && $0.endColumn == 4 })
+        #expect(bars.hidden == [0, 0, 0, 0, 2, 0, 0])
+        #expect(MonthBarLayout.layout(items: items, days: Array(repeating: nil, count: 7), maxLanes: 3).segments.isEmpty)
+    }
+
+    @Test func overlappingTimesSitSideBySide() {
+        let placed = TimelineLayout.layout([
+            TimedItem(id: "a", start: 10 * 60, end: 11 * 60),
+            TimedItem(id: "b", start: 10 * 60 + 30, end: 12 * 60),
+            TimedItem(id: "c", start: 11 * 60, end: 11 * 60 + 30),
+            TimedItem(id: "d", start: 13 * 60, end: 13 * 60 + 5),
+        ])
+        let byID = Dictionary(uniqueKeysWithValues: placed.map { ($0.id, $0) })
+        #expect(byID["a"]?.column == 0)
+        #expect(byID["b"]?.column == 1)
+        #expect(byID["c"]?.column == 0)
+        #expect(byID["a"]?.columnCount == 2)
+        #expect(byID["c"]?.columnCount == 2)
+        #expect(byID["d"] == TimedPlacement(id: "d", start: 13 * 60, end: 13 * 60 + 30, column: 0, columnCount: 1))
+    }
+}

@@ -105,7 +105,7 @@ struct RecordRow: View {
                     .font(.body.weight(.medium))
                     .lineLimit(2)
                 Text(verbatim: [record.kind.label, record.category].filter { !$0.isEmpty && $0 != record.displayTitle }
-                    .joined(separator: "・"))
+                    .joined(separator: "／"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

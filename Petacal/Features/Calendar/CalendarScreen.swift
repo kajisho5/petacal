@@ -66,7 +66,7 @@ struct CalendarScreen: View {
             return first.month == last.month
                 ? "\(first.month)月\(first.day)日〜\(last.day)日"
                 : "\(first.month)月\(first.day)日〜\(last.month)月\(last.day)日"
-        case .day: return store.heading(focus, today: today)
+        case .day: return store.heading(focus, today: nil)   // short, so it fits beside the buttons
         }
     }
 

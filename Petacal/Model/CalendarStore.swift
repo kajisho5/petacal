@@ -181,7 +181,7 @@ extension CalendarStore {
         return String(format: "%d:%02d", c.hour ?? 0, c.minute ?? 0)
     }
 
-    func heading(_ day: DayKey, today: DayKey) -> String {
+    func heading(_ day: DayKey, today: DayKey?) -> String {
         var text = "\(day.month)月\(day.day)日"
         if let weekday = day.weekday(calendar: calendar) {
             text += "（\(DayKey.weekdaySymbolsJa[weekday - 1])）"

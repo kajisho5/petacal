@@ -112,6 +112,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacalMacTests
         GENERATE_INFOPLIST_FILE: YES
+        # The Mac app's product is named Petacal (same module name as on iPhone), not PetacalMac.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Petacal.app/Contents/MacOS/Petacal
+        BUNDLE_LOADER: $(TEST_HOST)
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
   PetacalTests:

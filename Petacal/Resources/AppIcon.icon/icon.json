@@ -1,0 +1,31 @@
+{
+  "groups" : [
+    {
+      "layers" : [
+        { "glass" : true, "image-name" : "tape.svg", "name" : "Tape" },
+        { "glass" : true, "image-name" : "days.svg", "name" : "Days" }
+      ],
+      "name" : "Marks",
+      "shadow" : { "kind" : "layer-color", "opacity" : 0.4 },
+      "specular" : true,
+      "translucency" : { "enabled" : true, "value" : 0.5 }
+    },
+    {
+      "layers" : [
+        { "glass" : true, "image-name" : "page.svg", "name" : "Page" }
+      ],
+      "name" : "Card",
+      "shadow" : { "kind" : "neutral", "opacity" : 0.5 },
+      "specular" : true,
+      "translucency" : { "enabled" : true, "value" : 0.15 }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [ "watchOS" ],
+    "squares" : "shared"
+  },
+  "fill-specializations" : [
+    { "value" : { "linear-gradient" : [ "srgb:0.20000,0.60000,1.00000,1.00000", "srgb:0.00000,0.36000,0.80000,1.00000" ] } },
+    { "appearance" : "dark", "value" : { "linear-gradient" : [ "srgb:0.07000,0.18000,0.36000,1.00000", "srgb:0.03000,0.08000,0.17000,1.00000" ] } }
+  ]
+}

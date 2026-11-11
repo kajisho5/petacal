@@ -1,0 +1,25 @@
+# TestFlight への配信は kajisho5/runway の共通ワークフローに任せる（templates/testflight.yml から作成）。
+# Secrets は runway の sync-secrets が配る（runway の repos.txt に kajisho5/petacal を足す）。
+name: testflight
+
+on:
+  workflow_dispatch:      # GitHub の Actions タブ／iPhone の GitHub アプリから手動実行
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    uses: kajisho5/runway/.github/workflows/apple-testflight.yml@main
+    with:
+      bundle_id: com.seventhwell.petacal
+      project: Petacal.xcodeproj
+      scheme: Petacal
+      # .xcodeproj はコミットせず、project.yml から毎回つくる
+      pre_build: brew install xcodegen && xcodegen generate
+      # iOS 27.1 SDK でビルドすると iPhone Duo の画面全体を使う（kajisho5/iOS_atena と同じ指定）
+      xcode: "27.1"
+      runner: xcode-27
+    secrets: inherit

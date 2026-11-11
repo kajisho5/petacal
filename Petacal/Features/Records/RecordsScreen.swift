@@ -109,6 +109,7 @@ struct RecordsScreen: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             }

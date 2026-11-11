@@ -107,6 +107,7 @@ struct CalendarScreen: View {
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .padding(.horizontal)
             .padding(.vertical, 8)
 
@@ -395,7 +396,7 @@ private struct AccessIntro: View {
         ContentUnavailableView {
             Label("カレンダーの予定を表示します", systemImage: "calendar")
         } description: {
-            Text("この端末 に登録してあるカレンダー（iCloud、Google など）の予定を、ここに並べます。予定の内容が外に送られることはありません。")
+            Text("この端末に登録してあるカレンダー（iCloud、Google など）の予定を、ここに並べます。予定の内容が外に送られることはありません。")
         } actions: {
             Button("続ける", action: action)
                 .buttonStyle(.borderedProminent)
@@ -446,7 +447,7 @@ private struct AccessAskBanner: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("この端末 のカレンダーの予定も、ここに並べられます。")
+            Text("この端末のカレンダーの予定も、ここに並べられます。")
                 .font(.subheadline)
             Button("続ける", action: action)
                 .font(.subheadline.weight(.semibold))

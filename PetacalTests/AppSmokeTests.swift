@@ -60,6 +60,28 @@ import Testing
         #expect(store.events.count == 2)
     }
 
+    @Test func recordKindsHaveDefaultColoursThatCanChange() {
+        let defaults = UserDefaults(suiteName: "petacal-tests-kinds")!
+        defaults.removePersistentDomain(forName: "petacal-tests-kinds")
+        let colors = ColorStore(defaults: defaults)
+        #expect(colors.preset(for: .oshi).name == "ピンク・あざやか")
+        colors.setKind(.oshi, preset: 25)
+        #expect(colors.preset(for: .oshi).id == 25)
+        colors.setKind(.oshi, preset: nil)
+        #expect(colors.preset(for: .oshi).id == 35)
+    }
+
+    @Test func undoRunsOnceAndClears() {
+        let center = UndoCenter()
+        var count = 0
+        center.show("追加しました") { count += 1 }
+        #expect(center.message == "追加しました")
+        center.undo()
+        center.undo()
+        #expect(count == 1)
+        #expect(center.message == nil)
+    }
+
     @Test func recordsAddUpByDay() {
         let calendar = Calendar.current
         let day = calendar.startOfDay(for: Date(timeIntervalSince1970: 1_800_000_000))

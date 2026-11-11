@@ -7,6 +7,7 @@ struct QuickAddSheet: View {
 
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
+    @Environment(UndoCenter.self) private var undo
     @Environment(\.colorScheme) private var scheme
 
     @State private var text = ""
@@ -179,6 +180,10 @@ struct QuickAddSheet: View {
         do {
             let identifier = try store.add(draft)
             if let identifier, let colorPreset { colors.setEvent(identifier, preset: colorPreset) }
+            if let identifier {
+                let calendarStore = store
+                undo.show(String(localized: "予定を追加しました")) { calendarStore.remove(eventIdentifier: identifier) }
+            }
             sheet = nil
         } catch {
             failed = true

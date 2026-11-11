@@ -77,6 +77,14 @@ import UIKit
             Record(day: day(9, monthsBack: 1), kind: .balance, title: "食材", category: "食費", amount: -4300),
             Record(day: day(3, monthsBack: 2), kind: .balance, title: "修理代", category: "日用品", amount: -6500),
         ]
+        // A plain coloured square stands in for a photo.
+        let square = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 200)).image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+            UIColor.systemYellow.setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 50, y: 50, width: 100, height: 100))
+        }
+        samples[0].photos = [RecordPhoto(data: square.jpegData(compressionQuality: 0.8) ?? Data(), order: 0)]
         for record in samples { container.mainContext.insert(record) }
         try container.mainContext.save()
         return container
@@ -97,6 +105,7 @@ import UIKit
             .environment(CalendarStore(sample: ScreenshotTests.sample()))
             .environment(ColorStore(defaults: defaults))
             .environment(LockGate(defaults: defaults))
+            .environment(UndoCenter())
             .modelContainer(container)
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let frame = CGRect(x: 0, y: 0, width: 402, height: 874)
@@ -119,6 +128,13 @@ import UIKit
     @Test func monthBarsDark() async throws { try await shoot("month-bars-dark", mode: .month) }
     @Test func monthBarsLight() async throws { try await shoot("month-bars-light", mode: .month, style: .light) }
     @Test func monthDots() async throws { try await shoot("month-dots-dark", mode: .month, pattern: .dots) }
+    @Test func monthAmount() async throws { try await shoot("month-amount-light", mode: .month, pattern: .amount, style: .light) }
+    @Test func monthPhoto() async throws { try await shoot("month-photo-dark", mode: .month, pattern: .photo) }
+
+    @Test func searchAndColors() async throws {
+        try await render("search-light", style: .light, view: AnyView(NavigationStack { SearchScreen(query: "会") }))
+        try await render("colors-dark", style: .dark, view: AnyView(NavigationStack { ColorSettingsScreen() }))
+    }
     @Test func week() async throws { try await shoot("week-dark", mode: .week) }
     @Test func day() async throws { try await shoot("day-light", mode: .day, style: .light) }
 

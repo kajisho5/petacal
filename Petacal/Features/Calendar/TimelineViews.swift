@@ -101,10 +101,23 @@ struct TimelineScreen: View {
                             .offset(x: CGFloat(segment.startColumn) * width + 1, y: CGFloat(segment.lane) * laneHeight)
                         }
                     }
+                    // What did not fit in the three lanes.
+                    ForEach(Array(bars.hidden.enumerated()), id: \.offset) { column, count in
+                        if count > 0 {
+                            Text(verbatim: "+\(count)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .frame(width: width, alignment: .leading)
+                                .padding(.leading, 4)
+                                .offset(x: CGFloat(column) * width, y: CGFloat(lanes) * laneHeight)
+                                .accessibilityLabel(Text("ほか\(count)件"))
+                        }
+                    }
                 }
             }
         }
-        .frame(height: CGFloat(lanes) * laneHeight + (lanes > 0 ? 4 : 0))
+        .frame(height: CGFloat(lanes) * laneHeight + (lanes > 0 ? 4 : 0)
+               + (bars.hidden.contains { $0 > 0 } ? laneHeight * 0.8 : 0))
         .clipped()
     }
 

@@ -1,4 +1,5 @@
 import PetaCore
+import SwiftData
 import SwiftUI
 
 /// The standard month look: titled bars that span days (design-spec 月の表示パターン「帯」).
@@ -208,8 +209,9 @@ struct EventBar: View {
     }
 }
 
-/// 月の表示パターン「点と一覧」: a compact month with dots, and the selected day's list below.
-struct MonthDotsView: View {
+/// The compact month looks (点と一覧／金額／写真): a small month on top, the selected day's contents below.
+struct MonthCompactView: View {
+    let style: MonthPattern
     let grid: MonthGrid
     let today: DayKey
     @Binding var focus: DayKey
@@ -218,18 +220,23 @@ struct MonthDotsView: View {
 
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
+    @Environment(LockGate.self) private var lock
     @Environment(\.colorScheme) private var scheme
+    @Query private var records: [Record]
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 7)
 
     var body: some View {
+        let byDay: [DayKey: [Record]] = lock.isLocked
+            ? [:] : Dictionary(grouping: records) { DayKey(date: $0.day, calendar: store.calendar) }
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 WeekdayHeader(symbols: grid.weekdaySymbols)
                 LazyVGrid(columns: columns, spacing: 2) {
                     ForEach(Array(grid.weeks.joined().enumerated()), id: \.offset) { _, number in
                         if let number {
-                            dotCell(DayKey(year: grid.year, month: grid.month, day: number))
+                            let day = DayKey(year: grid.year, month: grid.month, day: number)
+                            cell(day, records: byDay[day] ?? [])
                         } else {
                             Color.clear.frame(height: 48)
                         }
@@ -245,32 +252,84 @@ struct MonthDotsView: View {
         }
     }
 
-    private func dotCell(_ day: DayKey) -> some View {
-        let items = store.events(on: day)
-        let traits: AccessibilityTraits = day == focus ? [.isButton, .isSelected] : [.isButton]
-        return VStack(spacing: 3) {
-            DayNumber(day: day, isToday: day == today)
-                .frame(height: 26)
-                .overlay {
-                    if day == focus && day != today {
-                        Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5)
-                    }
-                }
-            HStack(spacing: 3) {
-                ForEach(Array(items.prefix(3).enumerated()), id: \.offset) { _, item in
-                    Circle().fill(colors.color(for: item, scheme: scheme)).frame(width: 6, height: 6)
+    @ViewBuilder
+    private func face(_ day: DayKey, records: [Record], events: [EventItem]) -> some View {
+        let amount = records.compactMap(\.countedAmount).reduce(0, +)
+        let hasAmount = records.contains { $0.countedAmount != nil }
+        let photo = records.lazy.compactMap { $0.sortedPhotos.first }.first
+        let number = DayNumber(day: day, isToday: day == today)
+            .frame(height: 26)
+            .overlay {
+                if day == focus && day != today {
+                    Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5)
                 }
             }
-            .frame(height: 6)
+        let dots = HStack(spacing: 3) {
+            ForEach(Array(events.prefix(3).enumerated()), id: \.offset) { _, item in
+                Circle().fill(colors.color(for: item, scheme: scheme)).frame(width: 6, height: 6)
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 48)
-        .contentShape(Rectangle())
-        .onTapGesture { focus = day }
-        .onLongPressGesture(minimumDuration: 0.4) { onLongPress(day) }
-        .accessibilityElement()
-        .accessibilityLabel(Text(verbatim: "\(day.month)月\(day.day)日 予定\(items.count)件"))
-        .accessibilityAddTraits(traits)
-        .accessibilityAction { focus = day }
-        .accessibilityAction(named: Text("予定を追加")) { onLongPress(day) }
+        .frame(height: 6)
+
+        switch style {
+        case .amount:
+            VStack(spacing: 2) {
+                number
+                Text(verbatim: hasAmount ? Yen.signed(amount, unit: false) : " ")
+                    .font(.caption2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.amount(amount))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                dots
+            }
+            .frame(maxWidth: .infinity, minHeight: 62)
+        case .photo:
+            ZStack(alignment: .top) {
+                if let photo, let image = ThumbCache.image(for: photo) {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay { Image(uiImage: image).resizable().scaledToFill() }
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(alignment: .top) {
+                            // The number sits on its own plate so it stays readable on any photo.
+                            number.background(.regularMaterial, in: Capsule()).padding(.top, 2)
+                        }
+                        .overlay(alignment: .bottom) { dots.padding(3).background(.regularMaterial, in: Capsule()).padding(.bottom, 2)
+                            .opacity(events.isEmpty ? 0 : 1) }
+                } else {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay(alignment: .top) { number.padding(.top, 2) }
+                        .overlay(alignment: .bottom) { dots.padding(.bottom, 5) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        default:
+            VStack(spacing: 3) {
+                number
+                dots
+            }
+            .frame(maxWidth: .infinity, minHeight: 48)
+        }
+    }
+
+    private func cell(_ day: DayKey, records: [Record]) -> some View {
+        let events = store.events(on: day)
+        let traits: AccessibilityTraits = day == focus ? [.isButton, .isSelected] : [.isButton]
+        var label = "\(day.month)月\(day.day)日 予定\(events.count)件"
+        if !records.isEmpty { label += " 記録\(records.count)件" }
+        if records.contains(where: { $0.countedAmount != nil }) {
+            label += " " + Yen.signed(records.compactMap(\.countedAmount).reduce(0, +))
+        }
+        return face(day, records: records, events: events)
+            .contentShape(Rectangle())
+            .onTapGesture { focus = day }
+            .onLongPressGesture(minimumDuration: 0.4) { onLongPress(day) }
+            .accessibilityElement()
+            .accessibilityLabel(Text(verbatim: label))
+            .accessibilityAddTraits(traits)
+            .accessibilityAction { focus = day }
+            .accessibilityAction(named: Text("予定を追加")) { onLongPress(day) }
     }
 }

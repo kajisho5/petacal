@@ -87,7 +87,8 @@ import Testing
         let controller = NSHostingController(rootView: root)
         controller.sceneBridgingOptions = [.title, .toolbars]
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              // The same style as the windows SwiftUI makes itself (contents run under the title bar).
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -112,6 +113,19 @@ import Testing
         try await render("mac-records-light", dark: false, section: .records)
         try await render("mac-stats-dark", dark: true, section: .stats)
         try await render("mac-min-calendar-light", dark: false, size: CGSize(width: 800, height: 560))
+    }
+
+    /// The window the app opened by itself when the tests started it: its real title bar and toolbar
+    /// (no sample data in it, so it shows the first-run screen).
+    @Test func realWindow() async throws {
+        try await Task.sleep(for: .milliseconds(1500))
+        let window = try #require(NSApp.windows.first { $0.isVisible && $0.contentView != nil && $0.frame.width >= 600 })
+        let target = window.contentView?.superview ?? window.contentView!
+        let rep = try #require(target.bitmapImageRepForCachingDisplay(in: target.bounds))
+        target.cacheDisplay(in: target.bounds, to: rep)
+        let data = try #require(rep.representation(using: .png, properties: [:]))
+        try FileManager.default.createDirectory(at: MacScreenshotTests.folder, withIntermediateDirectories: true)
+        try data.write(to: MacScreenshotTests.folder.appendingPathComponent("mac-real-window.png"))
     }
 
     @Test func sheetsAndSettings() async throws {

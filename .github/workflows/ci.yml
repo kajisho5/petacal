@@ -71,6 +71,14 @@ jobs:
           status=$?
           grep -E "error:|warning: .*(isolat|Sendable|concurrency)|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild.log | sort -u | head -300
           exit $status
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: screenshots
+          path: /tmp/petacal-shots
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload the build log
         if: always()
         uses: actions/upload-artifact@v6

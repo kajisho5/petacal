@@ -39,6 +39,19 @@ final class CalendarStore {
     private(set) var events: [EventItem] = []
     private(set) var calendars: [CalendarInfo] = []
     private var range: (from: Date, to: Date)?
+    /// True when the store shows fixed sample items instead of the device calendars (screenshots, previews).
+    private let isSample: Bool
+
+    init() {
+        isSample = false
+    }
+
+    /// A store that never touches EventKit. For screenshots and previews, with fictional items.
+    init(sample: [EventItem]) {
+        isSample = true
+        access = .granted
+        events = sample.sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
+    }
 
     static func currentAccess() -> Access {
         switch EKEventStore.authorizationStatus(for: .event) {
@@ -57,6 +70,7 @@ final class CalendarStore {
     }
 
     func refreshAccess() {
+        guard !isSample else { return }
         access = CalendarStore.currentAccess()
         reload()
     }
@@ -67,6 +81,7 @@ final class CalendarStore {
     }
 
     func reload() {
+        guard !isSample else { return }
         guard access == .granted else {
             events = []
             calendars = []
@@ -166,7 +181,7 @@ extension CalendarStore {
         return String(format: "%d:%02d", c.hour ?? 0, c.minute ?? 0)
     }
 
-    func heading(_ day: DayKey, today: DayKey) -> String {
+    func heading(_ day: DayKey, today: DayKey?) -> String {
         var text = "\(day.month)月\(day.day)日"
         if let weekday = day.weekday(calendar: calendar) {
             text += "（\(DayKey.weekdaySymbolsJa[weekday - 1])）"

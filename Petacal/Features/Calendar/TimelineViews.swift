@@ -14,6 +14,7 @@ struct TimelineScreen: View {
     @ScaledMetric(relativeTo: .caption2) private var hourHeight: CGFloat = 52
     @ScaledMetric(relativeTo: .caption2) private var gutter: CGFloat = 44
     @ScaledMetric(relativeTo: .caption2) private var laneHeight: CGFloat = 20
+    @ScaledMetric(relativeTo: .caption2) private var labelInset: CGFloat = 7
 
     private var isWeek: Bool { days.count > 1 }
 
@@ -35,9 +36,10 @@ struct TimelineScreen: View {
                                 }
                             }
                         }
+                        .padding(.top, labelInset)     // lines run through the middle of the hour labels
                     }
-                    .frame(height: hourHeight * 24)
-                    .padding(.vertical, 8)
+                    .frame(height: hourHeight * 24 + labelInset, alignment: .top)
+                    .padding(.bottom, 8)
                 }
                 .onAppear { proxy.scrollTo(8, anchor: .top) }
             }
@@ -100,6 +102,7 @@ struct TimelineScreen: View {
             }
         }
         .frame(height: CGFloat(lanes) * laneHeight + (lanes > 0 ? 4 : 0))
+        .clipped()
     }
 
     private var hourLabels: some View {
@@ -109,7 +112,6 @@ struct TimelineScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(width: gutter, height: hourHeight, alignment: .top)
-                    .offset(y: -6)
                     .id(hour)
             }
         }
@@ -160,7 +162,10 @@ private struct DayColumn: View {
                 }
                 ForEach(placed, id: \.id) { place in
                     if let item = lookup[place.id] {
-                        let width = geo.size.width / CGFloat(place.columnCount)
+                        // Day view: overlapping events sit side by side. Week view: columns are too narrow
+                        // for that, so they are stacked with a small step and the later one on top.
+                        let step: CGFloat = compact ? 7 : geo.size.width / CGFloat(place.columnCount)
+                        let width = compact ? geo.size.width - CGFloat(place.column) * step : step
                         Button { onTap(item) } label: {
                             EventBlock(item: item, color: colors.color(for: item, scheme: scheme), compact: compact)
                         }
@@ -168,7 +173,8 @@ private struct DayColumn: View {
                         .accessibilityLabel(Text(verbatim: "\(item.title) \(store.timeText(item))"))
                         .frame(width: max(0, width - 2),
                                height: max(18, CGFloat(place.end - place.start) / 60 * hourHeight - 2))
-                        .offset(x: CGFloat(place.column) * width + 1, y: CGFloat(place.start) / 60 * hourHeight + 1)
+                        .offset(x: CGFloat(place.column) * step + 1, y: CGFloat(place.start) / 60 * hourHeight + 1)
+                        .zIndex(Double(place.column))
                     }
                 }
             }
@@ -209,7 +215,9 @@ private struct EventBlock: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(color.opacity(0.35))
+        .background(Color(uiColor: .systemBackground))   // opaque, so stacked blocks stay readable
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(uiColor: .systemBackground), lineWidth: 1))
         .contentShape(Rectangle())
     }
 }

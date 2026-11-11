@@ -139,12 +139,17 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(MonthlyQuota.key(for: at(2027, 1, 5), calendar: jst) == "2027-01")
         var quota = MonthlyQuota()
         #expect(quota.remaining(monthKey: november) == 5)
-        for _ in 0..<5 { #expect(quota.consume(monthKey: november)) }
+        for _ in 0..<5 {
+            let consumed = quota.consume(monthKey: november)
+            #expect(consumed)
+        }
         #expect(quota.remaining(monthKey: november) == 0)
-        #expect(!quota.consume(monthKey: november))
+        let sixth = quota.consume(monthKey: november)
+        #expect(!sixth)
         #expect(quota.used == 5)
         #expect(quota.remaining(monthKey: december) == 5)
-        #expect(quota.consume(monthKey: december))
+        let nextMonth = quota.consume(monthKey: december)
+        #expect(nextMonth)
         #expect(quota.remaining(monthKey: december) == 4)
     }
 }

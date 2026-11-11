@@ -3,29 +3,29 @@ import SwiftUI
 /// The few system colours the screens use, named once so iPhone, iPad and Mac share the same code.
 extension Color {
     /// Cards on a grouped page.
-    static var cardBackground: Color {
+    nonisolated static var cardBackground: Color {
         #if os(macOS)
         Color(nsColor: .controlBackgroundColor)
         #else
-        Color.cardBackground
+        Color(uiColor: .secondarySystemGroupedBackground)
         #endif
     }
 
     /// The plain page behind everything.
-    static var pageBackground: Color {
+    nonisolated static var pageBackground: Color {
         #if os(macOS)
         Color(nsColor: .windowBackgroundColor)
         #else
-        Color.pageBackground
+        Color(uiColor: .systemBackground)
         #endif
     }
 
     /// A quiet fill for chips and placeholders.
-    static var fillBackground: Color {
+    nonisolated static var fillBackground: Color {
         #if os(macOS)
         Color(nsColor: .quaternaryLabelColor)
         #else
-        Color.fillBackground
+        Color(uiColor: .tertiarySystemFill)
         #endif
     }
 }

@@ -24,11 +24,13 @@ struct BulkPhotosSheet: View {
     }
 
     var body: some View {
+        // Read here, not inside the picker's label (the system may build that label off the main thread).
+        let pickerTitle: LocalizedStringKey = photos.isEmpty ? "写真を選ぶ" : "写真を選び直す"
         NavigationStack {
             Form {
                 Section {
                     PhotosPicker(selection: $picked, maxSelectionCount: BulkPhotosSheet.maxPhotos, matching: .images) {
-                        Label(photos.isEmpty ? "写真を選ぶ" : "写真を選び直す", systemImage: "photo.on.rectangle.angled")
+                        Label(pickerTitle, systemImage: "photo.on.rectangle.angled")
                     }
                     if isLoading {
                         ProgressView(value: Double(loadedCount), total: Double(max(picked.count, 1))) {

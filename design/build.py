@@ -1167,6 +1167,113 @@ def iphone_month(theme, state="month"):
     return svg(w, h, t["bg"], "".join(b))
 
 
+# ---------- month display patterns (設定 → カレンダーの表示) ----------
+PHOTO_DAYS = {3: 0, 7: 1, 14: 2, 19: 3, 20: 0, 21: 1, 25: 2}
+
+
+def month_cells(t, x, y, cw, rh, bg, kind):
+    """Month grid for the 金額 and 写真 patterns: day number, small marks for events, then the main item."""
+    p = []
+    for i, d in enumerate("日月火水木金土"):
+        p.append(S(t, x + cw * (i + .5), y - 8, d, 12, "middle", bg=bg))
+    for r in range(6):
+        p.append(R(x, y + rh * r, cw * 7, 0.5, 0, t["sep"]))
+    busy = {}
+    for a, b_, _, cal in SPANS:
+        for d in range(a, b_ + 1):
+            busy.setdefault(d, []).append(cal)
+    for d in range(1, 31):
+        col, row = (d - 1) % 7, (d - 1) // 7
+        cx, cy = x + cw * col + cw / 2, y + rh * row + 14
+        if d == TODAY:
+            p.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="11" fill="{t["accent"]}"/>')
+            p.append(T(cx, cy + 5, str(d), 13, "#FFFFFF", 700, "middle", bg=t["accent"]))
+        else:
+            p.append(T(cx, cy + 5, str(d), 13, t["label"], 400, "middle", bg=bg))
+        cals = busy.get(d, [])[:3]
+        for k, cal in enumerate(cals):
+            p.append(f'<circle cx="{cx + (k - (len(cals) - 1) / 2) * 8:g}" cy="{cy + 18:g}" r="2.5" fill="{cal_color(t, cal)}"/>')
+        top = y + rh * row + 40
+        if kind == "amount" and d in RECORDS:
+            n = RECORDS[d][2]
+            cb = mix(t["plus"] if n > 0 else t["minus"], bg, 0.12)
+            p.append(R(x + cw * col + 3, top, cw - 6, 44, 10, cb))
+            p.append(T(cx, top + 19, "+" if n > 0 else "−", 13, t["plus"] if n > 0 else t["minus"], 700, "middle", bg=cb))
+            p.append(T(cx, top + 36, f"{abs(n):,}", 13, t["label"], 600, "middle", bg=cb))
+        if kind == "photo":
+            if d in PHOTO_DAYS:
+                p.append(thumb(t, x + cw * col + 4, top - 4, cw - 8, PHOTO_DAYS[d], 8))
+            if d in RECORDS and d not in PHOTO_DAYS:
+                p.append(amt(t, cx, top + 20, RECORDS[d][2], 11, "middle", bg=bg, unit=False))
+    return "".join(p)
+
+
+def iphone_pattern(theme, kind):
+    """S-01 月 in the other display patterns: dots (点と一覧), amount (金額), photo (写真)."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    b = cal_header(t, w, "2026年11月", 2)
+    if kind == "dots":
+        b.append(month_dots(t, 16, 230, (w - 32) / 7, 59, t["bg"]))
+        b.append(T(20, 546, "11月11日（水）・今日", 20, t["label"], 600))
+        b.append(agenda(t, 16, 558, w - 32, t["cell"]))
+    else:
+        b.append(month_cells(t, 8, 228, (w - 16) / 7, 108, t["bg"], kind))
+    b.append(tab_bar(w, h, t))
+    return svg(w, h, t["bg"], "".join(b))
+
+
+def mini(t, x, y, w, h, kind, bg):
+    """Small schematic of a pattern for the picker (shapes only, no text)."""
+    p = [R(x, y, w, h, 12, bg)]
+    cw, rh = (w - 16) / 7, (h - 16) / 3
+    for r in range(3):
+        for c in range(7):
+            cx, cy = x + 8 + cw * (c + .5), y + 8 + rh * r + 7
+            p.append(f'<circle cx="{cx:g}" cy="{cy:g}" r="2" fill="{t["sec"]}" fill-opacity="0.5"/>')
+            mark = (r * 7 + c) % 4
+            yy = y + 8 + rh * r + 13
+            if kind == "bars" and mark in (0, 1):
+                p.append(R(x + 8 + cw * c + 1, yy, cw * (2 if mark == 0 and c < 6 else 1) - 2, 5, 2, list(t["cal"].values())[(r + c) % 3]))
+            if kind == "dots" and mark != 2:
+                p.append(f'<circle cx="{cx:g}" cy="{yy + 3:g}" r="2" fill="{list(t["cal"].values())[(r + c) % 3]}"/>')
+            if kind == "amount" and mark in (0, 3):
+                p.append(R(x + 8 + cw * c + 2, yy, cw - 4, rh - 18, 3, t["plus"] if mark == 0 else t["minus"], ' fill-opacity="0.55"'))
+            if kind == "photo" and mark in (1, 3):
+                p.append(R(x + 8 + cw * c + 2, yy, cw - 4, rh - 18, 3, t["ph"][(r + c) % 4]))
+    return "".join(p)
+
+
+def iphone_pattern_picker(theme):
+    """S-05 設定 → カレンダーの表示: choose how the month looks."""
+    t = THEMES[theme]
+    w, h = 402, 874
+    c = t["cell"]
+    b = [status_bar(w, t), gbtn(t, 38, 84, "back", label="設定に戻る"), T(20, 148, "カレンダーの表示", 28, t["label"], 700),
+         S(t, 20, 174, "月の画面の見え方を選べます。いつでも変えられます。", 15)]
+    opts = [("bars", "帯（標準）", "予定の題名が見える", False, True), ("dots", "点と一覧", "月は小さく、下に一覧", False, False),
+            ("amount", "金額", "その日の収支を大きく", True, False), ("photo", "写真", "記録の写真を並べる", True, False)]
+    tw, th = (w - 48) / 2, 236
+    for i, (kind, name, sub, pro, on) in enumerate(opts):
+        x, y = 16 + (i % 2) * (tw + 16), 196 + (i // 2) * (th + 16)
+        st = f' stroke="{t["accent"]}" stroke-width="2"' if on else ""
+        b.append(R(x, y, tw, th, 24, c, st))
+        b.append(mini(t, x + 12, y + 12, tw - 24, 132, kind, t["field"] if theme == "light" else "#2C2C2E"))
+        b.append(T(x + 16, y + 172, name, 17, t["label"], 600, bg=c))
+        b.append(S(t, x + 16, y + 194, sub, 13, bg=c))
+        if on:
+            b.append(f'<g aria-label="選択中"><circle cx="{x + tw - 26}" cy="{y + 212}" r="11" fill="{t["accent"]}"/>'
+                     + ico("check", x + tw - 26, y + 212, "#FFFFFF", 2.4, .6) + "</g>")
+        else:
+            b.append(f'<circle cx="{x + tw - 26}" cy="{y + 212}" r="10" fill="none" stroke="{t["sec"]}" stroke-opacity="0.6" stroke-width="1.5"/>')
+        if pro:
+            b.append(R(x + 16, y + 202, 40, 20, 10, t["accent"]))
+            b.append(T(x + 36, y + 216, "Pro", 12, "#FFFFFF", 700, "middle", bg=t["accent"]))
+    b.append(S(t, 20, 722, "「日」「週」の画面は、どのパターンでも同じです。", 13))
+    b.append(tab_bar(w, h, t, active=3))
+    return svg(w, h, t["bg"], "".join(b))
+
+
 files = {}
 for th in ("light", "dark"):
     files.update({
@@ -1174,6 +1281,10 @@ for th in ("light", "dark"):
         f"iphone-S-01-day-{th}.svg": iphone_month(th, "day"),
         f"iphone-S-02-{th}.svg": iphone_month(th, "event"),
         f"iphone-S-01-week-{th}.svg": iphone_week(th),
+        f"iphone-S-01-dots-{th}.svg": iphone_pattern(th, "dots"),
+        f"iphone-S-01-amount-{th}.svg": iphone_pattern(th, "amount"),
+        f"iphone-S-01-photo-{th}.svg": iphone_pattern(th, "photo"),
+        f"iphone-S-05-patterns-{th}.svg": iphone_pattern_picker(th),
         f"iphone-S-01-dayview-{th}.svg": iphone_dayview(th),
         f"iphone-S-01-empty-{th}.svg": iphone_main(th, empty=True),
         f"iphone-S-01-ax5-{th}.svg": iphone_ax5(th),

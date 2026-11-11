@@ -131,6 +131,13 @@ import UIKit
         try await render("settings-calendars-light", style: .light, view: AnyView(NavigationStack { VisibleCalendarsScreen() }))
     }
 
+    @Test func importText() async throws {
+        let text = "来週の打ち合わせ、18日(水)15時からでお願いします。場所は会議室Bです。25日の懇親会は19時スタートです！"
+        try await render("import-text-light", style: .light, view: AnyView(
+            ImportTextSheet(sheet: .constant(nil), text: text, searchNow: true)))
+        try await render("import-text-empty-dark", style: .dark, view: AnyView(ImportTextSheet(sheet: .constant(nil))))
+    }
+
     @Test func quickAdd() async throws {
         let start = Calendar.current.startOfDay(for: Date())
         for (name, style) in [("quick-add-dark", UIUserInterfaceStyle.dark), ("quick-add-light", .light)] {

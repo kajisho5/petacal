@@ -31,6 +31,8 @@ enum CalendarSheet: Identifiable {
     case compose(QuickDraft)
     case edit(EventItem)
     case record(RecordTarget)
+    /// S-03: paste a message and pick the events found in it.
+    case importText
 
     var id: String {
         switch self {
@@ -40,6 +42,7 @@ enum CalendarSheet: Identifiable {
         case .compose(let draft): "compose-\(draft.id)"
         case .edit(let item): "edit-\(item.id)"
         case .record(let target): "record-\(target.id)"
+        case .importText: "import-text"
         }
     }
 }
@@ -122,6 +125,10 @@ struct CalendarScreen: View {
                         sheet = .new(newEventStart(on: focus), allDay: false)
                     }
                     .disabled(store.access != .granted)
+                    Button("貼り付けた文章から予定をつくる", systemImage: "doc.on.clipboard") {
+                        sheet = .importText
+                    }
+                    .disabled(store.access != .granted)
                     Button("記録を追加", systemImage: "square.and.pencil") {
                         sheet = .record(.new(focus.date(calendar: calendar) ?? Date()))
                     }
@@ -152,6 +159,8 @@ struct CalendarScreen: View {
                 .ignoresSafeArea()
             case .record(let target):
                 RecordEditor(target: target)
+            case .importText:
+                ImportTextSheet(sheet: $sheet)
             }
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: pressCount)

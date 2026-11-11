@@ -463,3 +463,28 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(b.title == "歯医者")
     }
 }
+
+@Suite struct TextEventExtractorTests {
+    private let now = at(2026, 11, 11, 9, 41)
+
+    @Test func findsTheEventsInTheDesignSample() {
+        let text = "来週の打ち合わせ、18日(水)15時からでお願いします。場所は会議室Bです。25日の懇親会は19時スタートです！"
+        let events = TextEventExtractor.extract(text, now: now, calendar: jst)
+        #expect(events == [
+            ExtractedEvent(title: "来週の打ち合わせ", day: DayKey(year: 2026, month: 11, day: 18),
+                           start: QuickAddParser.Time(hour: 15, minute: 0)),
+            ExtractedEvent(title: "懇親会", day: DayKey(year: 2026, month: 11, day: 25),
+                           start: QuickAddParser.Time(hour: 19, minute: 0)),
+        ])
+    }
+
+    @Test func handlesLinesAllDayAndNoDates() {
+        let events = TextEventExtractor.extract("12/3 大掃除\n12月5日(土) 10:00〜12:00 そらまめ商店 棚卸し\nよろしく！", now: now, calendar: jst)
+        #expect(events.count == 2)
+        #expect(events[0] == ExtractedEvent(title: "大掃除", day: DayKey(year: 2026, month: 12, day: 3)))
+        #expect(events[1].title == "そらまめ商店 棚卸し")
+        #expect(events[1].end == QuickAddParser.Time(hour: 12, minute: 0))
+        #expect(TextEventExtractor.extract("こんにちは。元気ですか？", now: now, calendar: jst).isEmpty)
+        #expect(TextEventExtractor.extract("20日です。", now: now, calendar: jst).first?.title == "予定")
+    }
+}

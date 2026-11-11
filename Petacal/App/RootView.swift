@@ -8,16 +8,10 @@ struct RootView: View {
                 NavigationStack { CalendarScreen() }
             }
             Tab("記録", systemImage: "note.text") {
-                NavigationStack {
-                    ComingSoonScreen(title: "記録", systemImage: "note.text",
-                                     message: "写真・金額・メモを、その日に残せるようになります。")
-                }
+                NavigationStack { RecordsScreen() }
             }
             Tab("集計", systemImage: "chart.bar") {
-                NavigationStack {
-                    ComingSoonScreen(title: "集計", systemImage: "chart.bar",
-                                     message: "月ごとの収支と、推し活の予算を見られるようになります。")
-                }
+                NavigationStack { StatsScreen() }
             }
             Tab("設定", systemImage: "gearshape") {
                 NavigationStack { SettingsScreen() }

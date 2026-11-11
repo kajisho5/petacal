@@ -1,6 +1,7 @@
 import Combine
 import EventKit
 import PetaCore
+import SwiftData
 import SwiftUI
 
 enum CalendarMode: String, CaseIterable, Identifiable {
@@ -29,6 +30,7 @@ enum CalendarSheet: Identifiable {
     /// The system edit screen, continuing from what the quick-add sheet has.
     case compose(QuickDraft)
     case edit(EventItem)
+    case record(RecordTarget)
 
     var id: String {
         switch self {
@@ -37,6 +39,7 @@ enum CalendarSheet: Identifiable {
         case .new(let date, let allDay): "new-\(date.timeIntervalSince1970)-\(allDay)"
         case .compose(let draft): "compose-\(draft.id)"
         case .edit(let item): "edit-\(item.id)"
+        case .record(let target): "record-\(target.id)"
         }
     }
 }
@@ -49,7 +52,9 @@ struct MonthRef: Equatable {
 /// S-01 カレンダー: day / week / month, with the events of the calendars registered on the device.
 struct CalendarScreen: View {
     @Environment(CalendarStore.self) private var store
+    @Environment(LockGate.self) private var lock
     @Environment(\.scenePhase) private var scenePhase
+    @Query private var records: [Record]
     @AppStorage("calendar.mode") private var modeRaw = CalendarMode.month.rawValue
     @AppStorage("calendar.pattern") private var patternRaw = MonthPattern.bars.rawValue
     @State private var focus = DayKey(date: Date(), calendar: .current)
@@ -90,7 +95,7 @@ struct CalendarScreen: View {
             if store.access == .denied {
                 AccessDeniedBanner()
             }
-            if store.access == .notDetermined {
+            if store.access == .notDetermined && records.isEmpty {
                 AccessIntro { Task { await store.requestAccess() } }
             } else {
                 content
@@ -107,9 +112,18 @@ struct CalendarScreen: View {
                 Button("次へ", systemImage: "chevron.forward") { move(by: 1) }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("予定を追加", systemImage: "plus") { sheet = .new(newEventStart(on: focus), allDay: false) }
-                    .buttonStyle(.borderedProminent)
+                Menu {
+                    Button("予定を追加", systemImage: "calendar.badge.plus") {
+                        sheet = .new(newEventStart(on: focus), allDay: false)
+                    }
                     .disabled(store.access != .granted)
+                    Button("記録を追加", systemImage: "square.and.pencil") {
+                        sheet = .record(.new(focus.date(calendar: calendar) ?? Date()))
+                    }
+                } label: {
+                    Label("追加", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
         .sheet(item: $sheet) { current in
@@ -129,7 +143,9 @@ struct CalendarScreen: View {
                     store.reload()
                     sheet = nil
                 }
-                    .ignoresSafeArea()
+                .ignoresSafeArea()
+            case .record(let target):
+                RecordEditor(target: target)
             }
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: pressCount)
@@ -151,7 +167,10 @@ struct CalendarScreen: View {
                                   today: today, focus: $focus, sheet: $sheet) { addAllDay(on: $0) }
                 } else {
                     MonthBarsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
-                                  today: today) { sheet = .day($0) } onLongPress: { addAllDay(on: $0) }
+                                  today: today,
+                                  amounts: lock.isLocked ? [:] : records.totalsByDay(calendar: calendar)) {
+                        sheet = .day($0)
+                    } onLongPress: { addAllDay(on: $0) }
                 }
             case .week:
                 TimelineScreen(days: focus.week(calendar: calendar), today: today, focus: $focus, sheet: $sheet,
@@ -246,4 +265,6 @@ private struct AccessDeniedBanner: View {
     NavigationStack { CalendarScreen() }
         .environment(CalendarStore())
         .environment(ColorStore())
+        .environment(LockGate())
+        .modelContainer(for: [Record.self, RecordPhoto.self], inMemory: true)
 }

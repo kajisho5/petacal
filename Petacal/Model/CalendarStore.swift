@@ -50,18 +50,33 @@ final class CalendarStore {
     private(set) var events: [EventItem] = []
     private(set) var calendars: [CalendarInfo] = []
     private var range: (from: Date, to: Date)?
+    /// Calendars the person switched off in 設定 → 表示するカレンダー.
+    private(set) var hiddenCalendarIDs: Set<String>
+    private var sampleItems: [EventItem] = []
+    private static let hiddenKey = "calendars.hidden"
     /// True when the store shows fixed sample items instead of the device calendars (screenshots, previews).
     private let isSample: Bool
 
     init() {
         isSample = false
+        hiddenCalendarIDs = Set(UserDefaults.standard.stringArray(forKey: CalendarStore.hiddenKey) ?? [])
+    }
+
+    func isVisible(_ id: String) -> Bool { !hiddenCalendarIDs.contains(id) }
+
+    func setVisible(_ id: String, _ visible: Bool) {
+        if visible { hiddenCalendarIDs.remove(id) } else { hiddenCalendarIDs.insert(id) }
+        if !isSample { UserDefaults.standard.set(Array(hiddenCalendarIDs).sorted(), forKey: CalendarStore.hiddenKey) }
+        reload()
     }
 
     /// A store that never touches EventKit. For screenshots and previews, with fictional items.
     init(sample: [EventItem]) {
         isSample = true
+        hiddenCalendarIDs = []
         access = .granted
-        events = sample.sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
+        sampleItems = sample.sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
+        events = sampleItems
         var seen: [String: CalendarInfo] = [:]
         for item in sample where seen[item.calendarID] == nil {
             seen[item.calendarID] = CalendarInfo(id: item.calendarID, title: item.calendarTitle,
@@ -98,7 +113,10 @@ final class CalendarStore {
     }
 
     func reload() {
-        guard !isSample else { return }
+        guard !isSample else {
+            events = sampleItems.filter { isVisible($0.calendarID) }
+            return
+        }
         guard access == .granted else {
             events = []
             calendars = []
@@ -112,10 +130,12 @@ final class CalendarStore {
         guard let range else { return }
         let predicate = eventStore.predicateForEvents(withStart: range.from, end: range.to, calendars: nil)
         events = eventStore.events(matching: predicate).map(CalendarStore.item)
+            .filter { isVisible($0.calendarID) }
             .sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
     }
 
-    var writableCalendars: [CalendarInfo] { calendars.filter(\.writable) }
+    /// New events can only go to calendars that are writable and shown.
+    var writableCalendars: [CalendarInfo] { calendars.filter { $0.writable && isVisible($0.id) } }
 
     /// The calendar new events go to unless the person picks another one.
     var defaultCalendarID: String? {

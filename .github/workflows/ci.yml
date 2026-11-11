@@ -27,12 +27,16 @@ jobs:
 
   ios:
     name: Build and test (iOS Simulator)
-    runs-on: macos-26
-    timeout-minutes: 45
+    # Xcode 27.1 (iOS 27.1 SDK), the same as the TestFlight build: needed for the iPhone Duo fold API.
+    runs-on: xcode-27
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      - name: Tool versions
+      - name: Select Xcode 27.1
         run: |
+          XCODE=$(ls -d /Applications/Xcode_27.1*.app | grep -vi beta | head -1)
+          [ -n "$XCODE" ] || { echo "::error::Xcode 27.1 is not on this runner"; ls /Applications | grep -i xcode; exit 1; }
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
           sw_vers
       - name: Generate the Xcode project
@@ -49,16 +53,31 @@ jobs:
           runtimes = sorted((r for r in devices if "iOS" in r), reverse=True)
           for runtime in runtimes:
               for d in devices[runtime]:
-                  if d["name"].startswith("iPhone") and "Pro" not in d["name"] and d.get("isAvailable"):
+                  if d["name"].startswith("iPhone") and "Pro" not in d["name"] and "Duo" not in d["name"] and d.get("isAvailable"):
                       print(d["udid"]); sys.exit(0)
           for runtime in runtimes:
               for d in devices[runtime]:
-                  if d["name"].startswith("iPhone"):
+                  if d["name"].startswith("iPhone") and "Duo" not in d["name"]:
                       print(d["udid"]); sys.exit(0)
           ')
           [ -n "$UDID" ] || { echo "::error::No iPhone simulator on this runner"; exit 1; }
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
           xcrun simctl list devices | grep "$UDID"
+          # Also an iPad and the iPhone Duo, for the pictures of the whole app with their real bars.
+          pick() {
+            xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          want = sys.argv[1]
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted((r for r in devices if "iOS" in r), reverse=True):
+              for d in devices[runtime]:
+                  if d["name"].startswith(want) and d.get("isAvailable"):
+                      print(d["udid"]); sys.exit(0)
+          ' "$1"
+          }
+          echo "ipad=$(pick "iPad Pro 13" || true)" >> "$GITHUB_OUTPUT"
+          echo "duo=$(pick "iPhone Duo" || true)" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep -E "iPad Pro 13|iPhone Duo" || true
       - name: Build and test
         run: |
           set +e
@@ -71,6 +90,31 @@ jobs:
           status=$?
           grep -E "error:|warning: .*(isolat|Sendable|concurrency)|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild.log | sort -u | head -300
           exit $status
+      # The same test bundle on other simulators (no rebuild). These never fail the job: they only add pictures.
+      - name: Whole app on an iPad
+        if: steps.sim.outputs.ipad != ''
+        continue-on-error: true
+        run: |
+          xcodebuild test-without-building \
+            -project Petacal.xcodeproj -scheme Petacal \
+            -destination "id=${{ steps.sim.outputs.ipad }}" \
+            -derivedDataPath build/DerivedData \
+            "-only-testing:PetacalTests/ScreenshotTests/deviceRoot()" \
+            CODE_SIGNING_ALLOWED=NO > xcodebuild-ipad.log 2>&1 || true
+          grep -E "error:|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild-ipad.log | sort -u | head -40
+      # The iPhone Duo simulator starts folded, so this is the outer display.
+      - name: Whole app on iPhone Duo (outer display)
+        if: steps.sim.outputs.duo != ''
+        continue-on-error: true
+        run: |
+          xcodebuild test-without-building \
+            -project Petacal.xcodeproj -scheme Petacal \
+            -destination "id=${{ steps.sim.outputs.duo }}" \
+            -derivedDataPath build/DerivedData \
+            "-only-testing:PetacalTests/ScreenshotTests/deviceRoot()" \
+            CODE_SIGNING_ALLOWED=NO > xcodebuild-duo.log 2>&1 || true
+          grep -E "error:|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild-duo.log | sort -u | head -40
+          ls -la /tmp/petacal-shots | head -60
       - name: Upload the screenshots
         if: always()
         uses: actions/upload-artifact@v6

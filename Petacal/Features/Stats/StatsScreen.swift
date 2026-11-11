@@ -49,20 +49,28 @@ struct StatsScreen: View {
                             ContentUnavailableView("この月の記録はありません", systemImage: "chart.bar")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 24)
-                        } else {
-                            totalCard
-                            dailyCard
-                            if oshiBudget > 0 { budgetCard }
-                            if !stats.byCategory.isEmpty { categoryCard }
+                        }
+                        // One column on iPhone; two or three side by side when there is room.
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 16, alignment: .top)],
+                                  alignment: .leading, spacing: 16) {
+                            if !monthRecords.isEmpty {
+                                totalCard
+                                dailyCard
+                                if oshiBudget > 0 { budgetCard }
+                                if !stats.byCategory.isEmpty { categoryCard }
+                            }
+                            trendCard
+                        }
+                        if !monthRecords.isEmpty {
                             Button {
                                 showSummary = true
                             } label: {
                                 Label("まとめ画像をつくる", systemImage: "photo")
-                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .frame(maxWidth: 520, minHeight: 44)
                             }
                             .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity)
                         }
-                        trendCard
                     }
                     .padding()
                 }
@@ -230,6 +238,6 @@ private struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) { content }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 24))
     }
 }

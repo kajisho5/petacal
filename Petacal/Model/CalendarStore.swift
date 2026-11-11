@@ -35,6 +35,7 @@ struct QuickDraft: Identifiable, Equatable {
     var end: Date
     var isAllDay: Bool
     var calendarID: String?
+    var location: String?
 }
 
 /// Reads and writes the calendars registered on the device (EventKit is the source of truth).
@@ -148,6 +149,7 @@ final class CalendarStore {
     func makeEvent(from draft: QuickDraft) -> EKEvent {
         let event = EKEvent(eventStore: eventStore)
         event.title = draft.title
+        if let location = draft.location, !location.isEmpty { event.location = location }
         event.isAllDay = draft.isAllDay
         event.startDate = draft.isAllDay ? calendar.startOfDay(for: draft.start) : draft.start
         event.endDate = draft.isAllDay ? calendar.startOfDay(for: max(draft.start, draft.end)) : max(draft.start, draft.end)

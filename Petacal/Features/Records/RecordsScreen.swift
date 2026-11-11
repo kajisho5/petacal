@@ -24,6 +24,9 @@ struct RecordsScreen: View {
     @State private var filter = "all"
     @State private var target: RecordTarget?
     @State private var bulk = false
+    /// The record shown on the trailing side (wide screens only).
+    @State private var selectedID: UUID?
+    @Environment(\.horizontalSizeClass) private var widthClass
 
     private var shown: [Record] {
         filter == "all" ? records : records.filter { $0.kindRaw == filter }
@@ -49,30 +52,20 @@ struct RecordsScreen: View {
                         .buttonStyle(.borderedProminent)
                 }
             } else {
-                List {
-                    Section {
-                        Picker("絞り込み", selection: $filter) {
-                            Text("すべて").tag("all")
-                            ForEach(RecordKind.allCases, id: \.rawValue) { kind in
-                                Text(verbatim: kind.label).tag(kind.rawValue)
-                            }
+                GeometryReader { proxy in
+                    if widthClass == .regular, proxy.size.width >= PaneSplit.minimumWidth {
+                        // Wide screens: the list on the leading side, the chosen record beside it.
+                        // Until something is chosen, the newest record is shown.
+                        let current = shown.first { $0.id == selectedID } ?? shown.first
+                        HStack(spacing: 0) {
+                            list(wide: true, current: current?.id)
+                                .frame(width: min(max(proxy.size.width * 0.4, 320), 420))
+                            Divider()
+                            RecordDetailPane(record: current) { target = .edit($0) }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
-                        .pickerStyle(.segmented)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets())
-                    }
-                    if shown.isEmpty {
-                        Text("この種類の記録はありません。").foregroundStyle(.secondary)
-                    }
-                    ForEach(groups, id: \.day) { group in
-                        Section {
-                            ForEach(group.records) { record in
-                                Button { target = .edit(record) } label: { RecordRow(record: record) }
-                                    .buttonStyle(.plain)
-                            }
-                        } header: {
-                            Text(verbatim: store.heading(group.day, today: nil))
-                        }
+                    } else {
+                        list(wide: false, current: nil)
                     }
                 }
             }
@@ -96,8 +89,100 @@ struct RecordsScreen: View {
         .sheet(isPresented: $bulk) { BulkPhotosSheet() }
     }
 
+    private func list(wide: Bool, current: UUID?) -> some View {
+        List {
+            Section {
+                Picker("絞り込み", selection: $filter) {
+                    Text("すべて").tag("all")
+                    ForEach(RecordKind.allCases, id: \.rawValue) { kind in
+                        Text(verbatim: kind.label).tag(kind.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            }
+            if shown.isEmpty {
+                Text("この種類の記録はありません。").foregroundStyle(.secondary)
+            }
+            ForEach(groups, id: \.day) { group in
+                Section {
+                    ForEach(group.records) { record in
+                        Button {
+                            if wide { selectedID = record.id } else { target = .edit(record) }
+                        } label: {
+                            RecordRow(record: record)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(wide && record.id == current ? Color.accentColor.opacity(0.15) : nil)
+                        .accessibilityAddTraits(wide && record.id == current ? .isSelected : [])
+                    }
+                } header: {
+                    Text(verbatim: store.heading(group.day, today: nil))
+                }
+            }
+        }
+    }
+
     private func add() {
         target = .new(store.calendar.startOfDay(for: Date()))
+    }
+}
+
+/// The chosen record, read-only, beside the list on wide screens. "編集" opens the same editor as on iPhone.
+struct RecordDetailPane: View {
+    let record: Record?
+    let onEdit: (Record) -> Void
+
+    @Environment(CalendarStore.self) private var store
+
+    var body: some View {
+        if let record {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(verbatim: record.displayTitle)
+                                .font(.title2.weight(.semibold))
+                            Text(verbatim: ([store.heading(DayKey(date: record.day, calendar: store.calendar), today: nil),
+                                             record.kind.label, record.category] as [String])
+                                .filter { !$0.isEmpty }.joined(separator: "・"))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 12)
+                        Button("編集") { onEdit(record) }
+                            .buttonStyle(.bordered)
+                    }
+                    if let amount = record.countedAmount {
+                        Text(verbatim: Yen.signed(amount))
+                            .font(.largeTitle.weight(.bold))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.amount(amount))
+                    }
+                    if !record.memo.isEmpty {
+                        Text(verbatim: record.memo)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 24))
+                    }
+                    ForEach(record.sortedPhotos) { photo in
+                        if let image = PlatformImage.make(photo.data) {
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 560)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .accessibilityLabel(Text("記録の写真"))
+                        }
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            ContentUnavailableView("記録を選ぶと、ここに内容が出ます", systemImage: "note.text")
+        }
     }
 }
 

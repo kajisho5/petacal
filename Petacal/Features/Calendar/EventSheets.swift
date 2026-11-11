@@ -90,7 +90,7 @@ struct DayContents: View {
                         .foregroundStyle(.secondary)
                         .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+                        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 24))
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(dayRecords.enumerated()), id: \.element.id) { index, record in
@@ -103,7 +103,7 @@ struct DayContents: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+                    .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 24))
                 }
             }
         }
@@ -128,7 +128,7 @@ struct DayEventList: View {
                 .buttonStyle(.plain)
             }
         }
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 24))
     }
 }
 

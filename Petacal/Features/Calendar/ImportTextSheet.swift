@@ -21,13 +21,21 @@ struct ImportTextSheet: View {
     @State private var pickingFile = false
     @State private var isReading = false
     @State private var readFailed = false
+    /// The on-device model is tidying titles and looking for places.
+    @State private var refining: Task<Void, Never>?
+    @State private var refinedCount = 0
     private let searchNow: Bool
 
     struct Candidate: Identifiable {
         let id = UUID()
         var isOn = true
         var title: String
+        var place = ""
         var event: ExtractedEvent
+        /// The sentence the event was found in, and the title cut out of it without AI.
+        var sentence = ""
+        var plainTitle = ""
+        var byAI = false
     }
 
     init(sheet: Binding<CalendarSheet?>, text: String = "", searchNow: Bool = false) {
@@ -111,13 +119,41 @@ struct ImportTextSheet: View {
                                     .textFieldStyle(.roundedBorder)
                                     .disabled(!candidate.isOn)
                                     .accessibilityLabel(Text("題名"))
+                                TextField("場所（なくてもかまいません）", text: $candidate.place)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.subheadline)
+                                    .disabled(!candidate.isOn)
+                                    .accessibilityLabel(Text("場所"))
+                                if candidate.byAI {
+                                    Label("AIが読み取った結果です", systemImage: "sparkles")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                             .padding(.vertical, 4)
+                        }
+                        if refining != nil {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("AIが題名と場所を読み取っています")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button("中止") { stopRefining() }
+                                    .font(.footnote)
+                            }
+                        } else if refinedCount > 0 {
+                            Button("AIの読み取りを取り消す", systemImage: "arrow.uturn.backward") { undoRefining() }
+                                .font(.footnote)
                         }
                     } header: {
                         Text("見つかった予定（\(found.count)件）")
                     } footer: {
-                        Text("題名は文章から機械的に切り出したものです。追加する前に直せます。時刻がないものは終日の予定になります。")
+                        if refinedCount > 0 || refining != nil {
+                            Text("日付と時刻はアプリが計算し、題名と場所だけを AI が読み取ります。AI はこの端末の中で動き、文章を外に送りません。まちがいがあれば、追加する前に直してください。")
+                        } else {
+                            Text("題名は文章から機械的に切り出したものです。追加する前に直せます。時刻がないものは終日の予定になります。")
+                        }
                     }
                     Section {
                         if store.writableCalendars.isEmpty {
@@ -182,6 +218,7 @@ struct ImportTextSheet: View {
             if calendarID == nil { calendarID = store.defaultCalendarID }
             if searchNow { search() }
         }
+        .onDisappear { refining?.cancel() }
     }
 
     /// Adds text read from a photo or a file, then looks for events.
@@ -197,9 +234,60 @@ struct ImportTextSheet: View {
 
     private func search() {
         editing = false
-        found = TextEventExtractor.extract(text, now: Date(), calendar: store.calendar)
-            .map { Candidate(title: $0.title, event: $0) }
+        stopRefining()
+        refinedCount = 0
+        found = TextEventExtractor.extractDetailed(text, now: Date(), calendar: store.calendar)
+            .map { Candidate(title: $0.event.title, event: $0.event, sentence: $0.sentence, plainTitle: $0.event.title) }
         searched = true
+        refine()
+    }
+
+    /// Asks the on-device model for a tidier title and the place, one event at a time.
+    /// Does nothing where the model is unavailable: the mechanical titles stay as they are.
+    private func refine() {
+        guard EventAI.isAvailable, !found.isEmpty else { return }
+        let fullText = text
+        let jobs = found.map { (id: $0.id, sentence: $0.sentence, plainTitle: $0.plainTitle) }
+        refining = Task {
+            for job in jobs {
+                if Task.isCancelled { break }
+                guard let result = await EventAI.details(sentence: job.sentence, fullText: fullText,
+                                                         fallbackTitle: job.plainTitle),
+                      !Task.isCancelled,
+                      let index = found.firstIndex(where: { $0.id == job.id }) else { continue }
+                // Never overwrite what the person has already typed.
+                var changed = false
+                if found[index].title == job.plainTitle, result.title != job.plainTitle {
+                    found[index].title = result.title
+                    changed = true
+                }
+                if found[index].place.isEmpty, !result.place.isEmpty {
+                    found[index].place = result.place
+                    changed = true
+                }
+                if changed {
+                    found[index].byAI = true
+                    refinedCount += 1
+                }
+            }
+            if !Task.isCancelled { refining = nil }
+        }
+    }
+
+    private func stopRefining() {
+        refining?.cancel()
+        refining = nil
+    }
+
+    /// Back to the titles cut out without AI (places found by AI are removed too).
+    private func undoRefining() {
+        stopRefining()
+        for index in found.indices where found[index].byAI {
+            found[index].title = found[index].plainTitle
+            found[index].place = ""
+            found[index].byAI = false
+        }
+        refinedCount = 0
     }
 
     private func whenText(_ event: ExtractedEvent) -> String {
@@ -220,9 +308,11 @@ struct ImportTextSheet: View {
                 let from = dayStart.addingTimeInterval(Double(start.minutes) * 60)
                 let to = candidate.event.end.map { dayStart.addingTimeInterval(Double($0.minutes) * 60) }
                     ?? from.addingTimeInterval(3600)
-                draft = QuickDraft(title: candidate.title, start: from, end: to, isAllDay: false, calendarID: calendarID)
+                draft = QuickDraft(title: candidate.title, start: from, end: to, isAllDay: false, calendarID: calendarID,
+                                   location: candidate.place)
             } else {
-                draft = QuickDraft(title: candidate.title, start: dayStart, end: dayStart, isAllDay: true, calendarID: calendarID)
+                draft = QuickDraft(title: candidate.title, start: dayStart, end: dayStart, isAllDay: true, calendarID: calendarID,
+                                   location: candidate.place)
             }
             do {
                 if let identifier = try store.add(draft) { added.append(identifier) }

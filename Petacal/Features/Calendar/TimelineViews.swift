@@ -256,9 +256,9 @@ private struct EventBlock: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(color.opacity(0.35))
-        .background(Color(uiColor: .systemBackground))   // opaque, so stacked blocks stay readable
+        .background(Color.pageBackground)   // opaque, so stacked blocks stay readable
         .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(uiColor: .systemBackground), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.pageBackground, lineWidth: 1))
         .contentShape(Rectangle())
     }
 }

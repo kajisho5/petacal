@@ -8,6 +8,8 @@ struct MonthBarsView: View {
     let today: DayKey
     /// The day's money in and out added up (empty while records are locked).
     var amounts: [DayKey: Int] = [:]
+    /// The day shown in the list beside the month (wide screens only).
+    var selected: DayKey?
     let onTap: (DayKey) -> Void
     let onLongPress: (DayKey) -> Void
 
@@ -33,7 +35,7 @@ struct MonthBarsView: View {
                                      bars: MonthBarLayout.layout(items: items, days: days, maxLanes: lanes),
                                      lookup: lookup, lanes: lanes, laneHeight: laneHeight,
                                      numberHeight: numberHeight, columnWidth: geo.size.width / 7,
-                                     amounts: amounts, onTap: onTap, onLongPress: onLongPress)
+                                     amounts: amounts, selected: selected, onTap: onTap, onLongPress: onLongPress)
                             .frame(height: rowHeight)
                     }
                 }
@@ -68,6 +70,7 @@ private struct MonthWeekRow: View {
     let numberHeight: CGFloat
     let columnWidth: CGFloat
     let amounts: [DayKey: Int]
+    let selected: DayKey?
     let onTap: (DayKey) -> Void
     let onLongPress: (DayKey) -> Void
 
@@ -80,7 +83,7 @@ private struct MonthWeekRow: View {
             Divider()
             HStack(spacing: 0) {
                 ForEach(Array(days.enumerated()), id: \.offset) { _, day in
-                    DayNumber(day: day, isToday: day == today)
+                    DayNumber(day: day, isToday: day == today, isSelected: day != nil && day == selected)
                         .frame(width: columnWidth, height: numberHeight)
                 }
             }
@@ -136,7 +139,7 @@ private struct MonthWeekRow: View {
                             .onLongPressGesture(minimumDuration: 0.4) { onLongPress(day) }
                             .accessibilityElement()
                             .accessibilityLabel(Text(verbatim: label(for: day)))
-                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAddTraits(day == selected ? [.isButton, .isSelected] : .isButton)
                             .accessibilityAction { onTap(day) }
                             .accessibilityAction(named: Text("予定を追加")) { onLongPress(day) }
                     } else {
@@ -165,6 +168,7 @@ private struct MonthWeekRow: View {
 struct DayNumber: View {
     let day: DayKey?
     let isToday: Bool
+    var isSelected = false
 
     var body: some View {
         if let day {
@@ -174,7 +178,13 @@ struct DayNumber: View {
                 .foregroundStyle(isToday ? Color.white : Color.primary)
                 .padding(.horizontal, 5)
                 .frame(minWidth: 24, minHeight: 24)
-                .background { if isToday { Capsule().fill(Color.accentColor) } }
+                .background {
+                    if isToday {
+                        Capsule().fill(Color.accentColor)
+                    } else if isSelected {
+                        Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5)
+                    }
+                }
                 .accessibilityHidden(true)
         } else {
             Color.clear
@@ -216,6 +226,8 @@ struct MonthCompactView: View {
     let today: DayKey
     @Binding var focus: DayKey
     @Binding var sheet: CalendarSheet?
+    /// False on wide screens, where the day's list sits beside the month instead of under it.
+    var showsDay = true
     let onLongPress: (DayKey) -> Void
 
     @Environment(CalendarStore.self) private var store
@@ -242,10 +254,12 @@ struct MonthCompactView: View {
                         }
                     }
                 }
-                Text(verbatim: store.heading(focus, today: today))
-                    .font(.title3.weight(.semibold))
-                    .accessibilityAddTraits(.isHeader)
-                DayContents(day: focus, sheet: $sheet) { sheet = .event($0) }
+                if showsDay {
+                    Text(verbatim: store.heading(focus, today: today))
+                        .font(.title3.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
+                    DayContents(day: focus, sheet: $sheet) { sheet = .event($0) }
+                }
             }
             .padding(.horizontal)
             .padding(.bottom, 24)

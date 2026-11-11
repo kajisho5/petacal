@@ -61,6 +61,9 @@ struct CalendarScreen: View {
     @Environment(CalendarStore.self) private var store
     @Environment(LockGate.self) private var lock
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var widthClass
+    /// Missing in previews and tests that show this screen on its own.
+    @Environment(AppRouter.self) private var router: AppRouter?
     @Query private var records: [Record]
     @AppStorage("calendar.mode") private var modeRaw = CalendarMode.month.rawValue
     @AppStorage("calendar.pattern") private var patternRaw = MonthPattern.bars.rawValue
@@ -159,21 +162,47 @@ struct CalendarScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.refreshAccess() }
         }
+        .onChange(of: router?.command, initial: true) { _, command in
+            guard let command else { return }
+            router?.command = nil
+            run(command)
+        }
     }
+
+    /// Commands from the keyboard and the menu bar. Each one is also a button on screen.
+    private func run(_ command: AppRouter.Command) {
+        switch command {
+        case .today: focus = today
+        case .newRecord: sheet = .record(.new(focus.date(calendar: calendar) ?? Date()))
+        case .newEvent:
+            if store.access == .granted { sheet = .new(newEventStart(on: focus), allDay: false) }
+        case .importText:
+            if store.access == .granted { sheet = .importText }
+        }
+    }
+
+    private var grid: MonthGrid { MonthGrid(year: focus.year, month: focus.month, calendar: calendar) }
 
     @ViewBuilder private var content: some View {
         Group {
             switch mode {
             case .month:
-                if pattern != .bars {
-                    MonthCompactView(style: pattern, grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
-                                  today: today, focus: $focus, sheet: $sheet) { addAllDay(on: $0) }
-                } else {
-                    MonthBarsView(grid: MonthGrid(year: focus.year, month: focus.month, calendar: calendar),
-                                  today: today,
-                                  amounts: lock.isLocked ? [:] : records.totalsByDay(calendar: calendar)) {
-                        sheet = .day($0)
-                    } onLongPress: { addAllDay(on: $0) }
+                GeometryReader { proxy in
+                    // Decided by the room there is, not by the kind of device.
+                    let split = widthClass == .regular
+                        ? PaneSplit.compute(width: proxy.size.width, fold: FoldReader.fold(in: proxy)) : nil
+                    if let split {
+                        wideMonth(split)
+                    } else if pattern != .bars {
+                        MonthCompactView(style: pattern, grid: grid, today: today, focus: $focus, sheet: $sheet) {
+                            addAllDay(on: $0)
+                        }
+                    } else {
+                        MonthBarsView(grid: grid, today: today,
+                                      amounts: lock.isLocked ? [:] : records.totalsByDay(calendar: calendar)) {
+                            sheet = .day($0)
+                        } onLongPress: { addAllDay(on: $0) }
+                    }
                 }
             case .week:
                 TimelineScreen(days: focus.week(calendar: calendar), today: today, focus: $focus, sheet: $sheet,
@@ -188,6 +217,33 @@ struct CalendarScreen: View {
                 move(by: value.translation.width < 0 ? 1 : -1)
             }
         )
+    }
+
+    /// Wide screens: the month on the leading side, the chosen day's list on the trailing side.
+    /// On a foldable the two halves meet at the fold, and nothing is drawn on it while it is partly folded.
+    private func wideMonth(_ split: PaneSplit) -> some View {
+        HStack(alignment: .top, spacing: split.gap) {
+            Group {
+                if split.compactMonth || pattern != .bars {
+                    MonthCompactView(style: pattern == .bars ? .amount : pattern, grid: grid, today: today,
+                                     focus: $focus, sheet: $sheet, showsDay: false) { addAllDay(on: $0) }
+                } else {
+                    MonthBarsView(grid: grid, today: today,
+                                  amounts: lock.isLocked ? [:] : records.totalsByDay(calendar: calendar),
+                                  selected: focus) {
+                        focus = $0
+                    } onLongPress: { addAllDay(on: $0) }
+                    .padding(.leading)
+                }
+            }
+            .frame(width: split.leading)
+            ScrollView {
+                DaySidePane(day: focus, today: today, sheet: $sheet)
+                    .padding(.trailing)
+                    .padding(.bottom, 24)
+            }
+            .frame(width: split.trailing)
+        }
     }
 
     /// Previous / next month, week or day. The buttons do the same as swiping sideways.
@@ -224,6 +280,51 @@ struct CalendarScreen: View {
         let base = day.date(calendar: calendar) ?? Date()
         let hour = day == today ? min(calendar.component(.hour, from: Date()) + 1, 23) : 9
         return calendar.date(byAdding: .hour, value: hour, to: base) ?? base
+    }
+}
+
+/// The list beside the month on wide screens: the chosen day, then a short look at the next day.
+private struct DaySidePane: View {
+    let day: DayKey
+    let today: DayKey
+    @Binding var sheet: CalendarSheet?
+
+    @Environment(CalendarStore.self) private var store
+
+    var body: some View {
+        let next = day.adding(days: 1, calendar: store.calendar)
+        let nextEvents = store.events(on: next)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(verbatim: store.heading(day, today: today))
+                .font(.title3.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            DayContents(day: day, sheet: $sheet) { sheet = .event($0) }
+            Text(verbatim: store.heading(next, today: today))
+                .font(.headline)
+                .padding(.top, 8)
+                .accessibilityAddTraits(.isHeader)
+            if nextEvents.isEmpty {
+                Text("予定はありません")
+                    .foregroundStyle(.secondary)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 24))
+            } else {
+                DayEventList(items: nextEvents) { sheet = .event($0) }
+            }
+        }
+    }
+}
+
+/// Reads where the fold of a foldable iPhone crosses a view (iOS 27.1 and later; nil everywhere else).
+enum FoldReader {
+    static func fold(in proxy: GeometryProxy) -> FoldRegion? {
+        guard #available(iOS 27.1, macOS 27.1, *) else { return nil }
+        // Inactive regions are included so the split is already at the fold before the device is folded.
+        let regions = proxy.reservedRegions(kind: .division, options: .includeInactive)
+        // Only a fold that runs top to bottom splits the screen into left and right.
+        guard let region = regions.first(where: { $0.frame.height >= $0.frame.width }) else { return nil }
+        return FoldRegion(minX: region.frame.minX, maxX: region.frame.maxX, isActive: region.isActive)
     }
 }
 
@@ -337,7 +438,7 @@ private struct AccessAskBanner: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal)
         .padding(.bottom, 8)
     }
@@ -357,7 +458,7 @@ private struct AccessDeniedBanner: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 16))
         .padding(.horizontal)
         .padding(.bottom, 8)
     }

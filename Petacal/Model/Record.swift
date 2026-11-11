@@ -65,7 +65,7 @@ final class RecordPhoto {
 
 extension RecordKind {
     /// The name people see.
-    var label: String {
+    nonisolated var label: String {
         switch self {
         case .balance: String(localized: "収支")
         case .oshi: String(localized: "推し活・趣味")
@@ -73,7 +73,7 @@ extension RecordKind {
         }
     }
 
-    var symbol: String {
+    nonisolated var symbol: String {
         switch self {
         case .balance: "yensign.circle"
         case .oshi: "heart"

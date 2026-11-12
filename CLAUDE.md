@@ -4,7 +4,7 @@
 - 返答は日本語。専門用語は避け、使うときは一言説明を添える。「版」ではなく「バージョン」と書く。
 - 設計とデザインの正は `design/design-spec.md`。画面を作る・直す前に必ず読む。モックは `design/mocks/`。
 - バンドルIDは `com.seventhwell.petacal`。アプリ名「ペタカレ」は仮称。
-- 実機確認は TestFlight だけ。配信は **kajisho5/runway**（`.github/workflows/testflight.yml` が呼ぶ）。Mac の Xcode から実機に入れる前提の提案はしない。
+- 実機確認は TestFlight だけ。配信は **kajisho5/runway**（iPhone／iPad は `.github/workflows/testflight.yml`、Mac は `.github/workflows/testflight-mac.yml` が呼ぶ。ビルド番号は端末ごとに別）。Mac の Xcode から実機に入れる前提の提案はしない。
 - サンプルデータは明らかに架空のものにする（実在の人物・会場・案件を使わない）。
 
 ## 構成

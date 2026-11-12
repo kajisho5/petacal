@@ -87,7 +87,7 @@ import Testing
             .modelContainer(try MacScreenshotTests.sampleContainer())
         let controller = NSHostingController(rootView: root)
         controller.sceneBridgingOptions = [.title, .toolbars]
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+        let window = FreeSizeWindow(contentRect: NSRect(origin: .zero, size: size),
                               // The same style as the windows SwiftUI makes itself (contents run under the title bar).
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -155,4 +155,10 @@ import Testing
         try await render("mac-event-editor-light", dark: false, size: CGSize(width: 540, height: 560),
                          view: AnyView(EventEditor(store: CalendarStore(sample: []).eventStore, event: nil) {}.sheetSize()))
     }
+}
+
+/// A window that keeps the size it is given even when the runner's screen is smaller
+/// (the CI Mac's screen is 1024 points wide; the App Store sizes are wider).
+private final class FreeSizeWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }

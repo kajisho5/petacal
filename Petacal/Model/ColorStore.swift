@@ -3,7 +3,7 @@ import PetaCore
 import SwiftUI
 
 /// The colours people picked (design-spec B-2 色分け). Kept in this app only; the device calendars are not changed.
-/// Saved on this device for now; iCloud sync arrives together with records (stage 3).
+/// The record kinds' colours follow iCloud (SettingsSync). Calendars and events are per device: their ids differ.
 @Observable
 final class ColorStore {
     private(set) var calendarChoices: [String: Int]
@@ -21,6 +21,13 @@ final class ColorStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        calendarChoices = (defaults.dictionary(forKey: ColorStore.calendarKey) as? [String: Int]) ?? [:]
+        eventChoices = (defaults.dictionary(forKey: ColorStore.eventKey) as? [String: Int]) ?? [:]
+        kindChoices = (defaults.dictionary(forKey: ColorStore.kindKey) as? [String: Int]) ?? [:]
+    }
+
+    /// After iCloud brought new values from another device.
+    func reload() {
         calendarChoices = (defaults.dictionary(forKey: ColorStore.calendarKey) as? [String: Int]) ?? [:]
         eventChoices = (defaults.dictionary(forKey: ColorStore.eventKey) as? [String: Int]) ?? [:]
         kindChoices = (defaults.dictionary(forKey: ColorStore.kindKey) as? [String: Int]) ?? [:]

@@ -43,6 +43,7 @@ targets:
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
+        UIBackgroundModes: [remote-notification]
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         UISupportedInterfaceOrientations~iphone:
@@ -56,6 +57,11 @@ targets:
       path: PetacalSupport/Petacal.entitlements
       properties:
         com.apple.security.application-groups: [group.com.seventhwell.petacal]
+        # 記録を iCloud（CloudKit の個人用の領域）でそろえる。設定はキーと値の iCloud でそろえる
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.seventhwell.petacal]
+        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+        aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal
@@ -132,6 +138,11 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.personal-information.calendars: true
         com.apple.security.files.user-selected.read-only: true
+        com.apple.security.network.client: true
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.seventhwell.petacal]
+        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+        com.apple.developer.aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal

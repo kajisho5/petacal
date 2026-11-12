@@ -88,7 +88,7 @@ struct SettingsScreen: View {
             Section {
                 LabeledContent("バージョン", value: version)
             } footer: {
-                Text("記録は今はこの端末の中だけに保存されます。iCloud でほかの端末とそろえる機能は、このあと追加します。")
+                Text("記録は今はこの端末の中だけに保存されます。iCloud でほかの端末とそろえる機能は準備中です。")
             }
         }
         .navigationTitle("設定")

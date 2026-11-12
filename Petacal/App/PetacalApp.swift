@@ -12,6 +12,7 @@ struct PetacalApp: App {
     @State private var router = AppRouter()
     @State private var entitlements = EntitlementStore()
     private let notificationPresenter = NotificationPresenter()
+    private let settingsSync = SettingsSync()
     #if os(macOS)
     /// One store for the main window and the settings window.
     private let container: ModelContainer = {
@@ -27,6 +28,13 @@ struct PetacalApp: App {
         UNUserNotificationCenter.current().delegate = notificationPresenter
     }
 
+    /// Starts following iCloud for the shared settings (once).
+    private func startSync() {
+        let colors = colorStore
+        settingsSync.onChange = { colors.reload() }
+        settingsSync.start()
+    }
+
     var body: some Scene {
         #if os(macOS)
         WindowGroup {
@@ -38,6 +46,7 @@ struct PetacalApp: App {
                 .environment(router)
                 .environment(entitlements)
                 .task { await entitlements.start() }
+                .onAppear { startSync() }
         }
         .modelContainer(container)
         .defaultSize(width: 1200, height: 780)
@@ -66,12 +75,15 @@ struct PetacalApp: App {
                 .environment(router)
                 .environment(entitlements)
                 .task { await entitlements.start() }
+                .onAppear { startSync() }
         }
         .modelContainer(for: [Record.self, RecordPhoto.self])
         .commands { AppCommands(router: router) }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase, initial: true) { _, phase in
             // Closing the app locks the records again.
             if phase == .background { lockGate.lock() }
+            // What was sent from another app's share menu, one at a time.
+            if phase == .active, let payload = ShareInbox.next() { router.send(.shared(payload)) }
         }
         #endif
     }

@@ -10,7 +10,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.9.0"
+    MARKETING_VERSION: "0.10.0"
     CURRENT_PROJECT_VERSION: "1"
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
     SWIFT_EMIT_LOC_STRINGS: YES
@@ -25,8 +25,10 @@ targets:
     platform: iOS
     sources:
       - path: Petacal
+      - path: Shared
     dependencies:
       - package: PetaCore
+      - target: PetacalShare
     info:
       path: Petacal/Info.plist
       properties:
@@ -41,6 +43,7 @@ targets:
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
+        PetacalTeamPrefix: $(AppIdentifierPrefix)
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         UISupportedInterfaceOrientations~iphone:
@@ -50,6 +53,12 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: PetacalSupport/Petacal.entitlements
+      properties:
+        # 「ペタカレに送る」との受け渡し（キーチェーンの共有。Apple のサイトでの登録は要らない）
+        keychain-access-groups: [$(AppIdentifierPrefix)com.seventhwell.petacal.shared]
+        # iCloud は容器を Apple Developer で登録してから足す（cloudkit/README.md）
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal
@@ -64,6 +73,42 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
+  # 「ペタカレに送る」: the share menu of other apps. Hands what it gets to the app through the app group.
+  PetacalShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Shared
+    info:
+      path: PetacalSupport/Share-Info.plist
+      properties:
+        CFBundleDisplayName: ペタカレに送る
+        PetacalTeamPrefix: $(AppIdentifierPrefix)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ja
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 10
+    entitlements:
+      path: PetacalSupport/PetacalShare.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)com.seventhwell.petacal.shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal.share
+        PRODUCT_NAME: PetacalShare
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
   # The Mac app: the same sources, built natively (not Catalyst). Not sent to TestFlight yet (runway has no macOS).
   PetacalMac:
     type: application
@@ -72,6 +117,7 @@ targets:
       - path: Petacal
         excludes:
           - Info.plist
+      - path: Shared
     dependencies:
       - package: PetaCore
     info:
@@ -90,6 +136,7 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.personal-information.calendars: true
         com.apple.security.files.user-selected.read-only: true
+        com.apple.security.network.client: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal

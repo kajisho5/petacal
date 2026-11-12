@@ -1,0 +1,48 @@
+# CloudKit のデータの形を開発用の環境に入れる（cloudkit/README.md）。本番への反映は CloudKit Console のボタンで本人が行う。
+name: cloudkit-schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        options: [validate, import, export]
+        default: validate
+
+permissions:
+  contents: read
+
+jobs:
+  schema:
+    runs-on: xcode-27
+    timeout-minutes: 15
+    env:
+      CONTAINER: iCloud.com.seventhwell.petacal
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select Xcode 27.1
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_27.1*.app | grep -vi beta | head -1)
+          sudo xcode-select -s "$XCODE"
+          xcrun cktool --version || true
+      - name: Run cktool
+        env:
+          CK_TOKEN: ${{ secrets.CLOUDKIT_MANAGEMENT_TOKEN }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          [ -n "$CK_TOKEN" ] || { echo "::error::Secret CLOUDKIT_MANAGEMENT_TOKEN が未登録（CloudKit Console で管理用トークンを作って登録する）"; exit 1; }
+          echo "::add-mask::$CK_TOKEN"
+          TEAM_ID="$(printf '%s' "$TEAM_ID" | tr -d '[:space:]')"
+          common=(--token "$CK_TOKEN" --team-id "$TEAM_ID" --container-id "$CONTAINER" --environment development)
+          case "$ACTION" in
+            validate) xcrun cktool validate-schema "${common[@]}" --file cloudkit/schema.ckdb ;;
+            import)
+              xcrun cktool validate-schema "${common[@]}" --file cloudkit/schema.ckdb
+              xcrun cktool import-schema "${common[@]}" --file cloudkit/schema.ckdb
+              echo "開発用の環境に入れた。本番へは CloudKit Console の Deploy Schema Changes で反映する" ;;
+          esac
+          xcrun cktool export-schema "${common[@]}" --output-file exported.ckdb
+          echo "--- いまの開発用の環境の形 ---"
+          cat exported.ckdb

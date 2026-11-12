@@ -77,7 +77,22 @@ jobs:
           }
           echo "ipad=$(pick "iPad Pro 13" || true)" >> "$GITHUB_OUTPUT"
           echo "duo=$(pick "iPhone Duo" || true)" >> "$GITHUB_OUTPUT"
-          xcrun simctl list devices available | grep -E "iPad Pro 13|iPhone Duo" || true
+          # App Store sizes: a large iPhone with Dynamic Island (Pro Max) and a medium one (Pro).
+          big() {
+            xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          want = sys.argv[1]
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted((r for r in devices if "iOS" in r), reverse=True):
+              for d in devices[runtime]:
+                  n = d["name"]
+                  if n.startswith("iPhone") and d.get("isAvailable") and (n.endswith(" Pro Max") if want == "max" else n.endswith(" Pro")):
+                      print(d["udid"]); sys.exit(0)
+          ' "$1"
+          }
+          echo "promax=$(big max || true)" >> "$GITHUB_OUTPUT"
+          echo "pro=$(big pro || true)" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep -E "iPad Pro 13|iPhone Duo|Pro Max| Pro \(" || true
       - name: Build and test
         run: |
           set +e
@@ -100,6 +115,7 @@ jobs:
             -destination "id=${{ steps.sim.outputs.ipad }}" \
             -derivedDataPath build/DerivedData \
             "-only-testing:PetacalTests/ScreenshotTests/deviceRoot()" \
+            "-only-testing:PetacalTests/ScreenshotTests/storeShots()" \
             CODE_SIGNING_ALLOWED=NO > xcodebuild-ipad.log 2>&1 || true
           grep -E "error:|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild-ipad.log | sort -u | head -40
       # The iPhone Duo simulator starts folded, so this is the outer display.
@@ -112,9 +128,27 @@ jobs:
             -destination "id=${{ steps.sim.outputs.duo }}" \
             -derivedDataPath build/DerivedData \
             "-only-testing:PetacalTests/ScreenshotTests/deviceRoot()" \
+            "-only-testing:PetacalTests/ScreenshotTests/storeShots()" \
             CODE_SIGNING_ALLOWED=NO > xcodebuild-duo.log 2>&1 || true
           grep -E "error:|Test (Suite|Case|run)|✔|✘|\*\* " xcodebuild-duo.log | sort -u | head -40
           ls -la /tmp/petacal-shots | head -60
+      # App Store screenshot sizes (App Store Connect Help, screenshot specifications).
+      - name: App Store screenshots on the large and medium iPhones
+        if: steps.sim.outputs.promax != '' || steps.sim.outputs.pro != ''
+        continue-on-error: true
+        run: |
+          for udid in "${{ steps.sim.outputs.promax }}" "${{ steps.sim.outputs.pro }}"; do
+            [ -n "$udid" ] || continue
+            xcrun simctl list devices | grep "$udid" || true
+            xcodebuild test-without-building \
+              -project Petacal.xcodeproj -scheme Petacal \
+              -destination "id=$udid" \
+              -derivedDataPath build/DerivedData \
+              "-only-testing:PetacalTests/ScreenshotTests/storeShots()" \
+              CODE_SIGNING_ALLOWED=NO > "xcodebuild-store-$udid.log" 2>&1 || true
+            grep -E "error:|Test (Suite|Case|run)|✔|✘|\*\* " "xcodebuild-store-$udid.log" | sort -u | head -20
+          done
+          ls /tmp/petacal-shots | grep '^store-' || true
       - name: Upload the screenshots
         if: always()
         uses: actions/upload-artifact@v6

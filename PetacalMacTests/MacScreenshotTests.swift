@@ -87,7 +87,7 @@ import Testing
             .modelContainer(try MacScreenshotTests.sampleContainer())
         let controller = NSHostingController(rootView: root)
         controller.sceneBridgingOptions = [.title, .toolbars]
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+        let window = FreeSizeWindow(contentRect: NSRect(origin: .zero, size: size),
                               // The same style as the windows SwiftUI makes itself (contents run under the title bar).
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -114,6 +114,16 @@ import Testing
         try await render("mac-records-light", dark: false, section: .records)
         try await render("mac-stats-dark", dark: true, section: .stats)
         try await render("mac-min-calendar-light", dark: false, size: CGSize(width: 800, height: 560))
+    }
+
+    /// App Store screenshots: 1440 × 900 points, one of the 16:10 sizes App Store Connect accepts
+    /// (1440 × 900 or 2880 × 1800 pixels, depending on the runner's screen).
+    @Test func storeShots() async throws {
+        let size = CGSize(width: 1440, height: 900)
+        try await render("store-mac-1-month", dark: false, size: size)
+        try await render("store-mac-2-records", dark: false, size: size, section: .records)
+        try await render("store-mac-3-stats", dark: false, size: size, section: .stats)
+        try await render("store-mac-4-month-dark", dark: true, size: size)
     }
 
     /// The window the app opened by itself when the tests started it: its real title bar and toolbar
@@ -145,4 +155,10 @@ import Testing
         try await render("mac-event-editor-light", dark: false, size: CGSize(width: 540, height: 560),
                          view: AnyView(EventEditor(store: CalendarStore(sample: []).eventStore, event: nil) {}.sheetSize()))
     }
+}
+
+/// A window that keeps the size it is given even when the runner's screen is smaller
+/// (the CI Mac's screen is 1024 points wide; the App Store sizes are wider).
+private final class FreeSizeWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }

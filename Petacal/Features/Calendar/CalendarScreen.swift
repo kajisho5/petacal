@@ -63,6 +63,7 @@ struct CalendarScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var widthClass
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// A Mac window is always treated as wide enough to decide by its real width.
     private var isRegularWidth: Bool {
         #if os(macOS)
@@ -81,6 +82,12 @@ struct CalendarScreen: View {
     @State private var sheet: CalendarSheet?
     /// Bumped on each long press, for the haptic tap.
     @State private var pressCount = 0
+    /// Moving to the previous / next page: the page follows the finger, then slides out and the new one slides in.
+    @State private var slide: CGFloat = 0
+    /// Used instead of sliding when Reduce Motion is on.
+    @State private var fade: Double = 1
+    @State private var pageWidth: CGFloat = 390
+    @State private var paging = false
 
     private var calendar: Calendar { store.calendar }
     private var today: DayKey { DayKey(date: Date(), calendar: calendar) }
@@ -139,11 +146,11 @@ struct CalendarScreen: View {
         .inlineTitle()
         .toolbar {
             ToolbarItem(placement: .barLeading) {
-                Button("今日") { focus = today }
+                Button("今日") { jump(to: today) }
             }
             ToolbarItemGroup(placement: .barTrailing) {
-                Button("前へ", systemImage: "chevron.backward") { move(by: -1) }
-                Button("次へ", systemImage: "chevron.forward") { move(by: 1) }
+                Button("前へ", systemImage: "chevron.backward") { go(by: -1) }
+                Button("次へ", systemImage: "chevron.forward") { go(by: 1) }
             }
             ToolbarItem(placement: .barTrailing) {
                 Menu {
@@ -200,7 +207,7 @@ struct CalendarScreen: View {
     /// Commands from the keyboard and the menu bar. Each one is also a button on screen.
     private func run(_ command: AppRouter.Command) {
         switch command {
-        case .today: focus = today
+        case .today: jump(to: today)
         case .newRecord: sheet = .record(.new(focus.date(calendar: calendar) ?? Date()))
         case .newEvent:
             if store.access == .granted { sheet = .new(newEventStart(on: focus), allDay: false) }
@@ -247,12 +254,81 @@ struct CalendarScreen: View {
                 TimelineScreen(days: [focus], today: today, focus: $focus, sheet: $sheet, pressCount: $pressCount)
             }
         }
+        .offset(x: slide)
+        .opacity(fade)
+        .clipped()
+        .contentShape(Rectangle())
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = max($0, 1) }
+        // Global coordinates: the page moves under the finger, so its own coordinates would move too.
         .simultaneousGesture(
-            DragGesture(minimumDistance: 40).onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) * 2 else { return }
-                move(by: value.translation.width < 0 ? 1 : -1)
-            }
+            DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                .onChanged { value in
+                    guard !paging, !reduceMotion else { return }
+                    let sideways = abs(value.translation.width) > abs(value.translation.height) * 2
+                    let next = sideways ? value.translation.width : 0
+                    if next != slide { slide = next }
+                }
+                .onEnded { value in
+                    let dx = value.translation.width
+                    let sideways = abs(dx) > abs(value.translation.height) * 2
+                    if sideways, abs(dx) > 40 || abs(value.predictedEndTranslation.width) > pageWidth / 3 {
+                        go(by: dx < 0 ? 1 : -1)
+                    } else if slide != 0 {
+                        withAnimation(.snappy) { slide = 0 }
+                    }
+                }
         )
+        // If an animation is cut short (the screen closes, the view changes), never stay stuck mid-slide.
+        .onDisappear { settle() }
+        .onChange(of: modeRaw) { settle() }
+    }
+
+    private func settle() {
+        paging = false
+        slide = 0
+        fade = 1
+    }
+
+    /// Previous / next page with the slide (the buttons, swiping and ⌘ shortcuts all come here).
+    private func go(by step: Int) {
+        page(step) { move(by: step) }
+    }
+
+    /// Jumps to a day, sliding the way the calendar goes (a day on the page already on screen just gets selected).
+    private func jump(to day: DayKey) {
+        let target = pageKey(of: day), current = pageKey(of: focus)
+        guard target != current else { focus = day; return }
+        page(target > current ? 1 : -1) { focus = day }
+    }
+
+    /// The first day of the page a day is on: its month, its week or the day itself.
+    private func pageKey(of day: DayKey) -> DayKey {
+        switch mode {
+        case .month: DayKey(year: day.year, month: day.month, day: 1)
+        case .week: day.week(calendar: calendar).first ?? day
+        case .day: day
+        }
+    }
+
+    /// The old page leaves on the side the finger went, the new one comes in from the other side (about 0.3 s).
+    /// With Reduce Motion on, a short fade instead.
+    private func page(_ direction: Int, change: @escaping () -> Void) {
+        guard !paging else { return }
+        paging = true
+        if reduceMotion {
+            slide = 0
+            withAnimation(.easeOut(duration: 0.1)) { fade = 0.2 } completion: {
+                change()
+                withAnimation(.easeIn(duration: 0.15)) { fade = 1 } completion: { paging = false }
+            }
+            return
+        }
+        let out = direction > 0 ? -pageWidth : pageWidth
+        withAnimation(.easeIn(duration: 0.12)) { slide = out } completion: {
+            change()
+            slide = -out
+            withAnimation(.spring(duration: 0.3, bounce: 0.1)) { slide = 0 } completion: { paging = false }
+        }
     }
 
     /// Wide screens: the month on the leading side, the chosen day's list on the trailing side.

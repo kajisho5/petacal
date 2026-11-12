@@ -25,8 +25,10 @@ targets:
     platform: iOS
     sources:
       - path: Petacal
+      - path: Shared
     dependencies:
       - package: PetaCore
+      - target: PetacalShare
     info:
       path: Petacal/Info.plist
       properties:
@@ -50,6 +52,10 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: PetacalSupport/Petacal.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.seventhwell.petacal]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal
@@ -64,6 +70,41 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
+  # 「ペタカレに送る」: the share menu of other apps. Hands what it gets to the app through the app group.
+  PetacalShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Shared
+    info:
+      path: PetacalSupport/Share-Info.plist
+      properties:
+        CFBundleDisplayName: ペタカレに送る
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ja
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 10
+    entitlements:
+      path: PetacalSupport/PetacalShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.seventhwell.petacal]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal.share
+        PRODUCT_NAME: PetacalShare
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
   # The Mac app: the same sources, built natively (not Catalyst). Not sent to TestFlight yet (runway has no macOS).
   PetacalMac:
     type: application
@@ -72,6 +113,7 @@ targets:
       - path: Petacal
         excludes:
           - Info.plist
+      - path: Shared
     dependencies:
       - package: PetaCore
     info:

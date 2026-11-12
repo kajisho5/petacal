@@ -31,3 +31,4 @@ __pycache__/
 PetacalMac/
 Petacal/Info.plist
 *.xcodeproj
+PetacalSupport/

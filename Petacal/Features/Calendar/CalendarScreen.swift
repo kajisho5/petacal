@@ -32,7 +32,7 @@ enum CalendarSheet: Identifiable {
     case edit(EventItem)
     case record(RecordTarget)
     /// S-03: paste a message and pick the events found in it.
-    case importText
+    case importText(String)
     case bulkPhotos
     case slots
 
@@ -152,7 +152,7 @@ struct CalendarScreen: View {
                     }
                     .disabled(store.access != .granted)
                     Button("貼り付けた文章から予定をつくる", systemImage: "doc.on.clipboard") {
-                        sheet = .importText
+                        sheet = .importText("")
                     }
                     .disabled(store.access != .granted)
                     Button("候補日をつくる（空き時間）", systemImage: "calendar.badge.clock") {
@@ -205,7 +205,15 @@ struct CalendarScreen: View {
         case .newEvent:
             if store.access == .granted { sheet = .new(newEventStart(on: focus), allDay: false) }
         case .importText:
-            if store.access == .granted { sheet = .importText }
+            if store.access == .granted { sheet = .importText("") }
+        case .shared(let payload):
+            let today = calendar.startOfDay(for: Date())
+            if payload.item.kind == .event, store.access == .granted {
+                sheet = .importText(payload.item.text)
+            } else {
+                // A record, or an event while calendar access is off: keep it as a record draft.
+                sheet = .record(.prefilled(today, memo: payload.item.text, photos: payload.photos))
+            }
         }
     }
 
@@ -388,8 +396,8 @@ private struct CalendarSheetHost: ViewModifier {
                 .ignoresSafeArea()
             case .record(let target):
                 RecordEditor(target: target)
-            case .importText:
-                ImportTextSheet(sheet: $sheet)
+            case .importText(let text):
+                ImportTextSheet(sheet: $sheet, text: text, searchNow: !text.isEmpty)
             case .bulkPhotos:
                 BulkPhotosSheet()
             case .slots:

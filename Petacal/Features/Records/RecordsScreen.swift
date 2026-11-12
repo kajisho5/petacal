@@ -9,10 +9,13 @@ import UIKit
 enum RecordTarget: Identifiable {
     case new(Date)
     case edit(Record)
+    /// A draft from another app (「ペタカレに送る」): the text becomes the memo.
+    case prefilled(Date, memo: String, photos: [Data])
 
     var id: String {
         switch self {
         case .new(let date): "new-\(date.timeIntervalSince1970)"
+        case .prefilled(let date, _, let photos): "shared-\(date.timeIntervalSince1970)-\(photos.count)"
         case .edit(let record): "edit-\(record.id)"
         }
     }

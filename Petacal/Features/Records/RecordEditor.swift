@@ -59,6 +59,15 @@ struct RecordEditor: View {
             _amountText = State(initialValue: "")
             _memo = State(initialValue: "")
             _photos = State(initialValue: [])
+        case .prefilled(let date, let memo, let photos):
+            _kind = State(initialValue: .free)
+            _day = State(initialValue: date)
+            _title = State(initialValue: "")
+            _category = State(initialValue: "")
+            _isPlus = State(initialValue: false)
+            _amountText = State(initialValue: "")
+            _memo = State(initialValue: memo)
+            _photos = State(initialValue: photos)
         case .edit(let record):
             _kind = State(initialValue: record.kind)
             _day = State(initialValue: record.day)
@@ -228,6 +237,13 @@ struct RecordEditor: View {
         .onChange(of: amountText) { _, _ in changed = true }
         .onChange(of: memo) { _, _ in changed = true }
         .onChange(of: photos) { _, _ in changed = true }
+        .onAppear {
+            // A shared draft with more photos than the free plan allows keeps the first one.
+            if case .prefilled = target, photos.count > photoLimit {
+                photos = Array(photos.prefix(photoLimit))
+                entitlements.ask(String(localized: "無料版は1件に1枚までです。Pro なら10枚まで"))
+            }
+        }
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
             Task { await load(items) }

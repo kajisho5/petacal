@@ -11,6 +11,8 @@ final class AppRouter {
 
     enum Command: Equatable {
         case newRecord, newEvent, importText, today
+        /// Something another app shared (「ペタカレに送る」).
+        case shared(SharedPayload)
     }
 
     var section: Section = .calendar

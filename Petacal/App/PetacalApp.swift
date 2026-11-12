@@ -69,9 +69,11 @@ struct PetacalApp: App {
         }
         .modelContainer(for: [Record.self, RecordPhoto.self])
         .commands { AppCommands(router: router) }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase, initial: true) { _, phase in
             // Closing the app locks the records again.
             if phase == .background { lockGate.lock() }
+            // What was sent from another app's share menu, one at a time.
+            if phase == .active, let payload = ShareInbox.next() { router.send(.shared(payload)) }
         }
         #endif
     }

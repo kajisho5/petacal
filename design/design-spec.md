@@ -193,7 +193,7 @@ petacal/
 | 端末 | iPhone Duo の内側（開いた状態・半分折った状態）の画像 | 外部の小さな道具（duo-hinge）を自動チェックで使う操作が、作業環境の安全確認で止められた。本人の判断（2026-11-12）で、自動チェックでは閉じた状態（外側）だけを撮り、開いた・半分折った状態は TestFlight の実機で確かめる。App Store の内側の画像（2007×2853）も、実機の画面の写しで用意する |
 | お金 | 商品の審査への提出 | 商品（年額・月額・買い切り）は App Store Connect に作成済み。審査への提出は初回のアプリ審査と一緒に行う |
 | 連携 | アカウントを直接つなぐ（Google ほか）、Google の予定ごとの色 | 各社の登録と審査が要る |
-| 仕上げ | 名前の決定（仮称のまま）、スクリーンショットのアップロード、審査への提出 | 名前：App Store で同じ名前は見つからなかった（似た名前に「ペアカレ」）。商標は未確認。サポートとプライバシーポリシーのページは公開済み（https://seventh-well.com/petacal/ ・ https://seventh-well.com/petacal/privacy/ 。公式サイトのリポジトリ kajisho5/seventhwell-live の `public/petacal/`。元の文は `store/`）。問い合わせ先は info@seventh-well.com。掲載文の案は `store/metadata-ja.md`。審査への提出は取り消せないので本人の確認を待つ |
+| 仕上げ | 名前の決定（仮称のまま）、スクリーンショットのアップロード、審査への提出 | 名前：App Store で同じ名前は見つからなかった（似た名前に「ペアカレ」）。商標は未確認。サポートとプライバシーポリシーのページは公開済み（https://seventh-well.com/petacal/ ・ https://seventh-well.com/petacal/privacy/ 。公式サイトのリポジトリ kajisho5/seventhwell-live の `public/petacal/`。元の文は `store/`）。問い合わせ先は info@seventh-well.com。掲載文（サブタイトル・説明・キーワード・プロモーション用テキスト・サポートとプライバシーポリシーの住所・カテゴリ・著作権・審査へのメモ）は、2026-11-12 に App Store Connect の iPhone 用と Mac 用のバージョン 1.0 へ入れた（`.github/workflows/store-metadata.yml`）。残りは年齢制限の質問、App のプライバシーの質問、スクリーンショット、審査の連絡先。App Store のバージョン 1.0 とアプリのバージョン 0.11.0 がそろっていないので、提出の前にそろえる。審査への提出は取り消せないので本人の確認を待つ |
 
 2026-11-12 に入れたもの：App Store 用のスクリーンショットを、受け付けられる寸法で自動で撮る（iPhone 2種・iPad 13インチ・iPhone Duo の外側・Mac。`tools/store_screenshots.py`）／アプリのアイコンを作り直した（カレンダーに記録の紙をテープでペタッと貼った形。文字なし。確認用の画像は `design/overview/app-icon-preview.png`。ガラスの効果やティントの見え方は実機でしか確かめられない）／App Store の掲載文の案と文字数の確認（`tools/check_metadata.py`）／プライバシーポリシーとサポートのページの案。
 

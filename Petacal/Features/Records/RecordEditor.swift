@@ -39,6 +39,10 @@ struct RecordEditor: View {
         var amountText: String
         var isPlus: Bool
         var day: Date
+        var title: String
+        var category: String
+        /// The title or the 種目 came from the on-device model.
+        var byAI = false
     }
 
     static let maxPhotos = 10
@@ -159,26 +163,31 @@ struct RecordEditor: View {
                 }
                 Section {
                     photoStrip
-                    if kind != .free && !photos.isEmpty {
+                    if !photos.isEmpty {
                         Button {
                             Task { await readFirstPhoto() }
                         } label: {
                             HStack(spacing: 8) {
                                 if isReading { ProgressView() }
-                                Label("写真から金額と日付を読み取る", systemImage: "text.viewfinder")
+                                Label("写真から金額・日付・題名を読み取る", systemImage: "text.viewfinder")
                             }
                         }
                         .disabled(isReading)
                     }
                     if let note = readNote {
                         HStack(alignment: .firstTextBaseline) {
-                            Label("写真から読み取りました。金額と日付を確かめてから保存してください。", systemImage: "exclamationmark.circle")
+                            Label(note.byAI
+                                  ? "写真から読み取りました（題名と種目は AI の案です）。確かめてから保存してください。"
+                                  : "写真から読み取りました。金額と日付を確かめてから保存してください。",
+                                  systemImage: note.byAI ? "sparkles" : "exclamationmark.circle")
                                 .font(.footnote)
                             Spacer(minLength: 8)
                             Button("元に戻す") {
                                 amountText = note.amountText
                                 isPlus = note.isPlus
                                 day = note.day
+                                title = note.title
+                                category = note.category
                                 readNote = nil
                             }
                             .font(.footnote)
@@ -191,7 +200,7 @@ struct RecordEditor: View {
                 } header: {
                     Text("写真")
                 } footer: {
-                    Text("1件に\(photoLimit)枚まで。レシートや払い戻しの画面の写真から、金額と日付を読み取れます（この端末の中で読み取り、外には送りません）。")
+                    Text("1件に\(photoLimit)枚まで。レシートや払い戻しの画面の写真から、金額と日付を読み取れます。対応する機種では、題名と種目の案を AI がつくります（この端末の中で読み取り、外には送りません。金額と日付は AI を使いません）。")
                 }
                 if existing != nil {
                     Section {
@@ -314,15 +323,31 @@ struct RecordEditor: View {
         readNothing = false
         let text = await TextRecognizer.recognize(data)
         let draft = ReceiptReader.read(text, now: Date(), calendar: .current)
+        // The title and the 種目 from the on-device model, only for fields still empty
+        // (one of the free plan's monthly AI reads).
+        var suggestion: RecordAIReply?
+        let wantsAI = title.isEmpty || (kind != .free && category.isEmpty)
+        if wantsAI, EventAI.isAvailable, entitlements.isPro || AIQuota.consume() {
+            suggestion = await EventAI.recordDraft(text: text, known: suggestions)
+        }
         isReading = false
-        guard let amount = draft.amount else {
+        guard draft.amount != nil || suggestion != nil else {
             readNothing = true
             return
         }
-        readNote = ReadNote(amountText: amountText, isPlus: isPlus, day: day)
-        amountText = String(amount)
+        var note = ReadNote(amountText: amountText, isPlus: isPlus, day: day, title: title, category: category)
+        if let amount = draft.amount { amountText = String(amount) }
         if let plus = draft.isPlus, kind == .balance { isPlus = plus }
         if let found = draft.day?.date(calendar: .current) { day = found }
+        if let suggested = suggestion?.title, title.isEmpty {
+            title = suggested
+            note.byAI = true
+        }
+        if let suggested = suggestion?.category, category.isEmpty, kind != .free {
+            category = suggested
+            note.byAI = true
+        }
+        readNote = note
     }
 
     private func load(_ items: [PhotosPickerItem]) async {

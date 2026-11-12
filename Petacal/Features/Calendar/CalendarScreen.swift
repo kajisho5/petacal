@@ -62,6 +62,7 @@ struct CalendarScreen: View {
     @Environment(LockGate.self) private var lock
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var widthClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// A Mac window is always treated as wide enough to decide by its real width.
     private var isRegularWidth: Bool {
         #if os(macOS)
@@ -165,6 +166,12 @@ struct CalendarScreen: View {
         .calendarSheets($sheet)
         .sensoryFeedback(.impact(weight: .medium), trigger: pressCount)
         .task(id: month) { loadAround() }
+        .onAppear {
+            // At the largest text sizes the day view reads best: the default until the person picks another.
+            if typeSize.isAccessibilitySize, UserDefaults.standard.object(forKey: "calendar.mode") == nil {
+                modeRaw = CalendarMode.day.rawValue
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged).receive(on: RunLoop.main)) { _ in
             store.reload()
         }

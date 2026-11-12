@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UserNotifications
 
 @main
 struct PetacalApp: App {
@@ -9,6 +10,7 @@ struct PetacalApp: App {
     @State private var lockGate = LockGate()
     @State private var undoCenter = UndoCenter()
     @State private var router = AppRouter()
+    private let notificationPresenter = NotificationPresenter()
     #if os(macOS)
     /// One store for the main window and the settings window.
     private let container: ModelContainer = {
@@ -19,6 +21,10 @@ struct PetacalApp: App {
         }
     }()
     #endif
+
+    init() {
+        UNUserNotificationCenter.current().delegate = notificationPresenter
+    }
 
     var body: some Scene {
         #if os(macOS)

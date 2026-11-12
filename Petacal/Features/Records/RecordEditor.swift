@@ -29,6 +29,16 @@ struct RecordEditor: View {
     @State private var confirmDiscard = false
     @State private var changed = false
     @FocusState private var amountFocused: Bool
+    /// What was read from a photo, with the values it replaced (for "元に戻す").
+    @State private var readNote: ReadNote?
+    @State private var isReading = false
+    @State private var readNothing = false
+
+    struct ReadNote: Equatable {
+        var amountText: String
+        var isPlus: Bool
+        var day: Date
+    }
 
     static let maxPhotos = 10
 
@@ -135,10 +145,39 @@ struct RecordEditor: View {
                 }
                 Section {
                     photoStrip
+                    if kind != .free && !photos.isEmpty {
+                        Button {
+                            Task { await readFirstPhoto() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                if isReading { ProgressView() }
+                                Label("写真から金額と日付を読み取る", systemImage: "text.viewfinder")
+                            }
+                        }
+                        .disabled(isReading)
+                    }
+                    if let note = readNote {
+                        HStack(alignment: .firstTextBaseline) {
+                            Label("写真から読み取りました。金額と日付を確かめてから保存してください。", systemImage: "exclamationmark.circle")
+                                .font(.footnote)
+                            Spacer(minLength: 8)
+                            Button("元に戻す") {
+                                amountText = note.amountText
+                                isPlus = note.isPlus
+                                day = note.day
+                                readNote = nil
+                            }
+                            .font(.footnote)
+                        }
+                    } else if readNothing {
+                        Label("金額を読み取れませんでした。手で入力してください。", systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("写真")
                 } footer: {
-                    Text("1件に\(RecordEditor.maxPhotos)枚まで。")
+                    Text("1件に\(RecordEditor.maxPhotos)枚まで。レシートや払い戻しの画面の写真から、金額と日付を読み取れます（この端末の中で読み取り、外には送りません）。")
                 }
                 if existing != nil {
                     Section {
@@ -235,7 +274,26 @@ struct RecordEditor: View {
         }
     }
 
+    /// Reads the first photo's text on the device and fills in what it says (never the title or the memo).
+    private func readFirstPhoto() async {
+        guard let data = photos.first else { return }
+        isReading = true
+        readNothing = false
+        let text = await TextRecognizer.recognize(data)
+        let draft = ReceiptReader.read(text, now: Date(), calendar: .current)
+        isReading = false
+        guard let amount = draft.amount else {
+            readNothing = true
+            return
+        }
+        readNote = ReadNote(amountText: amountText, isPlus: isPlus, day: day)
+        amountText = String(amount)
+        if let plus = draft.isPlus, kind == .balance { isPlus = plus }
+        if let found = draft.day?.date(calendar: .current) { day = found }
+    }
+
     private func load(_ items: [PhotosPickerItem]) async {
+        let wasEmpty = photos.isEmpty
         isLoadingPhotos = true
         for item in items where photos.count < RecordEditor.maxPhotos {
             if let data = try? await item.loadTransferable(type: Data.self),
@@ -245,6 +303,10 @@ struct RecordEditor: View {
         }
         picked = []
         isLoadingPhotos = false
+        // A new record's first photo is read right away when no amount has been typed yet.
+        if wasEmpty, existing == nil, kind != .free, amountText.isEmpty, !photos.isEmpty {
+            await readFirstPhoto()
+        }
     }
 
     private func save() {
@@ -259,6 +321,7 @@ struct RecordEditor: View {
         for old in record.photos ?? [] { context.delete(old) }
         record.photos = photos.enumerated().map { index, data in RecordPhoto(data: data, order: index) }
         try? context.save()
+        BudgetNotifier.check(context: context)
         if existing == nil {
             let modelContext = context
             undo.show(String(localized: "記録を追加しました")) {

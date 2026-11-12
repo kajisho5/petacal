@@ -5,6 +5,8 @@ struct SettingsScreen: View {
     @Environment(LockGate.self) private var lock
     @State private var lockUnavailable = false
     @AppStorage("budget.oshi") private var oshiBudget = 0
+    @AppStorage(BudgetNotifier.enabledKey) private var budgetNotify = false
+    @State private var notifyDenied = false
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -44,10 +46,28 @@ struct SettingsScreen: View {
                         Text("円").foregroundStyle(.secondary)
                     }
                 }
+                if oshiBudget > 0 {
+                    Toggle("予算の8割と超えたときに通知", isOn: Binding(
+                        get: { budgetNotify },
+                        set: { value in
+                            guard value else { budgetNotify = false; return }
+                            Task {
+                                let granted = await BudgetNotifier.requestPermission()
+                                budgetNotify = granted
+                                notifyDenied = !granted
+                            }
+                        }))
+                    .alert("通知を送れません", isPresented: $notifyDenied) {
+                        Button("設定を開く") { SystemSettings.openNotifications() }
+                        Button("閉じる", role: .cancel) {}
+                    } message: {
+                        Text("このアプリの通知がオフになっています。「設定」でオンにすると、予算のお知らせが届きます。")
+                    }
+                }
             } header: {
                 Text("記録")
             } footer: {
-                Text("ロックをオンにすると、記録・金額・集計は Face ID／Touch ID／パスコードで解除するまで隠れます。予定はそのまま見られます。アプリを閉じると、もう一度ロックされます。予算を入れると、集計に使った割合が出て、8割を超えたら知らせます（0 で予算なし）。")
+                Text("ロックをオンにすると、記録・金額・集計は Face ID／Touch ID／パスコードで解除するまで隠れます。予定はそのまま見られます。アプリを閉じると、もう一度ロックされます。予算を入れると、集計に使った割合が出て、8割を超えたら知らせます（0 で予算なし）。通知の文には金額を入れません。")
             }
             Section {
                 LabeledContent("バージョン", value: version)

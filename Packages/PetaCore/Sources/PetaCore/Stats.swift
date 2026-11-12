@@ -71,7 +71,7 @@ public enum StatsCalculator {
 
 /// How much of a monthly budget is used.
 public struct BudgetUsage: Equatable, Sendable {
-    public enum Level: Sendable { case ok, near, over }
+    public enum Level: String, Sendable { case ok, near, over }
 
     public var limit: Int
     public var spent: Int

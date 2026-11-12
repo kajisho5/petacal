@@ -109,6 +109,8 @@ jobs:
       - name: Whole app on an iPad
         if: steps.sim.outputs.ipad != ''
         continue-on-error: true
+        # A simulator that hangs must not hold up the whole job: these steps only add pictures.
+        timeout-minutes: 15
         run: |
           xcodebuild test-without-building \
             -project Petacal.xcodeproj -scheme Petacal \
@@ -122,6 +124,8 @@ jobs:
       - name: Whole app on iPhone Duo (outer display)
         if: steps.sim.outputs.duo != ''
         continue-on-error: true
+        # A simulator that hangs must not hold up the whole job: these steps only add pictures.
+        timeout-minutes: 15
         run: |
           xcodebuild test-without-building \
             -project Petacal.xcodeproj -scheme Petacal \
@@ -136,6 +140,8 @@ jobs:
       - name: App Store screenshots on the large and medium iPhones
         if: steps.sim.outputs.promax != '' || steps.sim.outputs.pro != ''
         continue-on-error: true
+        # A simulator that hangs must not hold up the whole job: these steps only add pictures.
+        timeout-minutes: 15
         run: |
           for udid in "${{ steps.sim.outputs.promax }}" "${{ steps.sim.outputs.pro }}"; do
             [ -n "$udid" ] || continue

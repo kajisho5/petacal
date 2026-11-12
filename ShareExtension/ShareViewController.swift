@@ -148,7 +148,7 @@ struct ShareView: View {
             .alert("受け取れませんでした", isPresented: Binding(get: { model.failed }, set: { model.failed = $0 })) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("ペタカレを一度開いてから、もう一度送ってください。")
+                Text("写真が大きすぎるか、端末の空きが足りない可能性があります。写真を減らして、もう一度送ってください。")
             }
         }
     }

@@ -188,8 +188,8 @@ petacal/
 
 | 分類 | まだ無いもの | 止まっている理由 |
 |---|---|---|
-| 取り込み | ほかのアプリの共有からの受け取り（「ペタカレに送る」） | 作成済み（プルリクエスト #15）。アプリと受け口が共有するフォルダ（App Group `group.com.seventhwell.petacal`）を Apple のサイトで本人が登録して App ID にひも付けるまで、TestFlight に出せない（Apple の API では作れず、自動の登録でも通らなかった） |
-| 記録・設定 | iCloud でほかの端末とそろえる | 作成済み（プルリクエスト #15、方式は CloudKit）。必要なこと：①iCloud の容器 `iCloud.com.seventhwell.petacal` の登録と App ID へのひも付け（本人）②CloudKit Console の管理用トークンを GitHub の Secret `CLOUDKIT_MANAGEMENT_TOKEN` に登録（本人）③データの形を開発用の環境に入れる（`cloudkit-schema` ワークフロー）④CloudKit Console の「Deploy Schema Changes」で本番へ反映（本人。入れた項目はあとから消せない）。表示するカレンダーとカレンダーの色は端末ごとに違う番号なので、そろえない |
+| 取り込み | ほかのアプリの共有からの受け取り（「ペタカレに送る」） | 作成済み（プルリクエスト #15）。受け渡しは App Group をやめてキーチェーンの共有にした（Apple のサイトでの登録が要らない）。TestFlight への送信を確かめてからマージ |
+| 記録・設定 | iCloud でほかの端末とそろえる | コードとデータの形（cloudkit/）は作成済みだが、アプリの権限には入れていない。iCloud の容器 `iCloud.com.seventhwell.petacal` を Apple Developer で登録する必要があり（Apple の API では作れない）、iPhone だけではやりにくいので保留。パソコンのブラウザ（Windows でもよい）で登録できるときに進める。その後、CloudKit Console の管理用トークンの登録と「Deploy Schema Changes」（入れた項目はあとから消せない）が要る |
 | 端末 | Mac 版の実機での確認 | Mac 版はバージョン 0.9.0（ビルド 1）が TestFlight に届いた（`.github/workflows/testflight-mac.yml`）。本人は Mac を持っていないので、Mac での動作は自動チェックの画面の画像でしか確かめていない |
 | 端末 | iPhone Duo の内側（開いた状態・半分折った状態）の画像での確認 | 外部の小さな道具（duo-hinge）を自動チェックで使う操作が、作業環境の安全確認で2回止められた。本人がはっきり「duo-hinge を入れていい」と書けば、もう一度試す |
 | 取り込み | AI による記録の下書き | 今は写真の文字から金額・向き・日付を計算で読む（AI は使っていない）。題名や種目を AI で埋めるのは未着手 |

@@ -4,6 +4,8 @@ import Foundation
 /// Only what means the same everywhere: calendar ids, for example, differ per device and stay local.
 final class SettingsSync {
     static let keys = ["calendar.pattern", "budget.oshi", "colors.kind"]
+    /// Off until the iCloud capability is in the app (the container needs registering on Apple's site first).
+    static let isEnabled = false
 
     private let cloud = NSUbiquitousKeyValueStore.default
     private let defaults: UserDefaults
@@ -18,7 +20,7 @@ final class SettingsSync {
     }
 
     func start() {
-        guard !started else { return }
+        guard SettingsSync.isEnabled, !started else { return }
         started = true
         observers.append(NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification, object: cloud, queue: .main) { [weak self] note in

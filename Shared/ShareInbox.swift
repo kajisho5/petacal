@@ -1,7 +1,8 @@
 import Foundation
 import ImageIO
+import Security
 
-/// What another app shared to ペタカレ (「ペタカレに送る」), waiting in the shared folder until the app opens.
+/// What another app shared to ペタカレ (「ペタカレに送る」), waiting until the app opens.
 /// The share extension writes it; the app reads it once and removes it. Nothing leaves the device.
 struct SharedItem: Codable, Equatable, Identifiable, Sendable {
     enum Kind: String, Codable, Sendable { case event, record }
@@ -18,46 +19,82 @@ struct SharedPayload: Equatable, Sendable {
     var photos: [Data]
 }
 
+/// Kept in a keychain group the app and the share extension both use. Keychain groups that start with
+/// the team id need no registration on Apple's site (unlike App Groups), so this works with automatic signing.
 enum ShareInbox {
-    static let groupID = "group.com.seventhwell.petacal"
+    static let service = "com.seventhwell.petacal.inbox"
     static let maxPhotos = 10
 
-    /// nil when the app group is missing (Mac, tests without signing).
-    static var folder: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID)?
-            .appendingPathComponent("Inbox", isDirectory: true)
+    /// "TEAMID.com.seventhwell.petacal.shared", from the Info.plist (nil in unsigned test builds).
+    static var accessGroup: String? {
+        guard let prefix = Bundle.main.object(forInfoDictionaryKey: "PetacalTeamPrefix") as? String,
+              !prefix.isEmpty, !prefix.contains("$") else { return nil }
+        return prefix + "com.seventhwell.petacal.shared"
+    }
+
+    private static func query(_ account: String? = nil) -> [String: Any] {
+        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+        if let accessGroup { q[kSecAttrAccessGroup as String] = accessGroup }
+        if let account { q[kSecAttrAccount as String] = account }
+        return q
+    }
+
+    private static func put(_ account: String, _ data: Data) throws {
+        var q = query(account)
+        q[kSecValueData as String] = data
+        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemDelete(query(account) as CFDictionary)
+        let status = SecItemAdd(q as CFDictionary, nil)
+        guard status == errSecSuccess else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
+    }
+
+    private static func read(_ account: String) -> Data? {
+        var q = query(account)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess else { return nil }
+        return out as? Data
+    }
+
+    private static func accounts() -> [String] {
+        var q = query()
+        q[kSecReturnAttributes as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitAll
+        var out: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
+              let rows = out as? [[String: Any]] else { return [] }
+        return rows.compactMap { $0[kSecAttrAccount as String] as? String }
     }
 
     static func save(kind: SharedItem.Kind, text: String, photos: [Data]) throws {
-        guard let folder else { throw CocoaError(.fileNoSuchFile) }
         let kept = Array(photos.prefix(maxPhotos))
         let item = SharedItem(kind: kind, text: text, photoCount: kept.count)
-        let dir = folder.appendingPathComponent(item.id.uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let id = item.id.uuidString
         for (index, data) in kept.enumerated() {
-            try data.write(to: dir.appendingPathComponent("\(index).jpg"), options: .atomic)
+            try put("\(id).\(index)", data)
         }
-        // The item file goes last: a half-written folder is never picked up.
-        try JSONEncoder().encode(item).write(to: dir.appendingPathComponent("item.json"), options: .atomic)
+        // The item goes last: a half-written entry is never picked up.
+        try put("\(id).json", JSONEncoder().encode(item))
     }
 
-    /// The oldest waiting item, taken out of the folder.
+    /// The oldest waiting item, taken out of the inbox.
     static func next() -> SharedPayload? {
-        guard let folder,
-              let dirs = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return nil }
-        let items: [(dir: URL, item: SharedItem)] = dirs.compactMap { dir in
-            guard let data = try? Data(contentsOf: dir.appendingPathComponent("item.json")),
-                  let item = try? JSONDecoder().decode(SharedItem.self, from: data) else { return nil }
-            return (dir, item)
+        let names = accounts()
+        let items: [SharedItem] = names.filter { $0.hasSuffix(".json") }.compactMap { name in
+            read(name).flatMap { try? JSONDecoder().decode(SharedItem.self, from: $0) }
         }
-        guard let oldest = items.min(by: { $0.item.created < $1.item.created }) else { return nil }
-        let photos = (0..<oldest.item.photoCount).compactMap { try? Data(contentsOf: oldest.dir.appendingPathComponent("\($0).jpg")) }
-        try? FileManager.default.removeItem(at: oldest.dir)
-        return SharedPayload(item: oldest.item, photos: photos)
+        guard let oldest = items.min(by: { $0.created < $1.created }) else { return nil }
+        let id = oldest.id.uuidString
+        let photos = (0..<oldest.photoCount).compactMap { read("\(id).\($0)") }
+        for name in names where name.hasPrefix(id) {
+            SecItemDelete(query(name) as CFDictionary)
+        }
+        return SharedPayload(item: oldest, photos: photos)
     }
 
     /// A JPEG at most `maxSide` pixels on its long side, upright.
-    static func shrink(_ data: Data, maxSide: Int = 2048) -> Data? {
+    static func shrink(_ data: Data, maxSide: Int = 1600) -> Data? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -67,7 +104,7 @@ enum ShareInbox {
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         let output = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(output, "public.jpeg" as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
         return CGImageDestinationFinalize(destination) ? output as Data : nil
     }
 }

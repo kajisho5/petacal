@@ -102,7 +102,8 @@ import UIKit
     /// `wide` draws the view the way a wide screen would (regular width), at the given size.
     /// The bars around it are not the real ones there: see `deviceRoot` for those.
     private func render(_ name: String, style: UIUserInterfaceStyle, size: CGSize = ScreenshotTests.phone,
-                        wide: Bool = false, largest: Bool = false, freePlan: Bool = false, view: AnyView) async throws {
+                        wide: Bool = false, largest: Bool = false, freePlan: Bool = false,
+                        section: AppRouter.Section = .calendar, view: AnyView) async throws {
         let defaults = UserDefaults(suiteName: "petacal-tests-shots")!
         defaults.removePersistentDomain(forName: "petacal-tests-shots")
         let container = try ScreenshotTests.sampleContainer()
@@ -113,7 +114,7 @@ import UIKit
             .environment(LockGate(defaults: defaults))
             .environment(UndoCenter())
             .environment(EntitlementStore(forced: !freePlan))
-            .environment(AppRouter())
+            .environment({ let router = AppRouter(); router.section = section; return router }())
             .modelContainer(container)
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         // A zero size means: whatever the device's own scene gives (real bars, real size classes).
@@ -167,6 +168,23 @@ import UIKit
             + (traits?.horizontalSizeClass == .regular ? "-regular" : "-compact") + posture
         try await render("\(name)-root-light", style: .light, size: .zero, view: AnyView(RootView()))
         try await render("\(name)-root-dark", style: .dark, size: .zero, view: AnyView(RootView()))
+    }
+
+    /// App Store screenshots: the whole app at the device's own size (CI runs this on each store size;
+    /// tools/store_screenshots.py keeps only the sizes App Store Connect accepts and removes the alpha).
+    @Test func storeShots() async throws {
+        UserDefaults.standard.set(CalendarMode.month.rawValue, forKey: "calendar.mode")
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let bounds = scene?.coordinateSpace.bounds ?? .zero
+        let posture = ProcessInfo.processInfo.environment["PETACAL_POSTURE"].map { "-\($0)" } ?? ""
+        let name = "store-\(Int(bounds.width))x\(Int(bounds.height))\(posture)"
+        UserDefaults.standard.set(MonthPattern.bars.rawValue, forKey: "calendar.pattern")
+        try await render("\(name)-1-month", style: .light, size: .zero, view: AnyView(RootView()))
+        try await render("\(name)-2-records", style: .light, size: .zero, section: .records, view: AnyView(RootView()))
+        try await render("\(name)-3-stats", style: .light, size: .zero, section: .stats, view: AnyView(RootView()))
+        UserDefaults.standard.set(MonthPattern.photo.rawValue, forKey: "calendar.pattern")
+        try await render("\(name)-4-photos", style: .dark, size: .zero, view: AnyView(RootView()))
+        UserDefaults.standard.set(MonthPattern.bars.rawValue, forKey: "calendar.pattern")
     }
 
     /// The free plan: the Pro screen and where the paid features are.

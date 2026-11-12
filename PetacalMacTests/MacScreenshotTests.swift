@@ -116,6 +116,16 @@ import Testing
         try await render("mac-min-calendar-light", dark: false, size: CGSize(width: 800, height: 560))
     }
 
+    /// App Store screenshots: 1440 × 900 points, one of the 16:10 sizes App Store Connect accepts
+    /// (1440 × 900 or 2880 × 1800 pixels, depending on the runner's screen).
+    @Test func storeShots() async throws {
+        let size = CGSize(width: 1440, height: 900)
+        try await render("store-mac-1-month", dark: false, size: size)
+        try await render("store-mac-2-records", dark: false, size: size, section: .records)
+        try await render("store-mac-3-stats", dark: false, size: size, section: .stats)
+        try await render("store-mac-4-month-dark", dark: true, size: size)
+    }
+
     /// The window the app opened by itself when the tests started it: its real title bar and toolbar
     /// (no sample data in it, so it shows the first-run screen).
     @Test func realWindow() async throws {

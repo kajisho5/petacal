@@ -592,3 +592,17 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(BudgetAlert.toSend(BudgetUsage(limit: 0, spent: 5000), alreadySent: nil) == nil)
     }
 }
+
+@Suite struct RecordAIReplyTests {
+    @Test func readsAndChecksTheSuggestion() {
+        let reply = RecordAIReply.parse("題名: そらまめ商店でお買い物\n種目：食費")
+        #expect(reply == RecordAIReply(title: "そらまめ商店でお買い物", category: "食費"))
+        // The person's own spelling of a 種目 wins.
+        #expect(RecordAIReply.checked(RecordAIReply(title: "買い物", category: "食料"), known: ["食料品", "日用品"]).category == "食料品")
+        // Money never goes in a title; overlong values are dropped.
+        #expect(RecordAIReply.checked(RecordAIReply(title: "合計 1,100円"), known: []).title == nil)
+        #expect(RecordAIReply.checked(RecordAIReply(title: String(repeating: "あ", count: 21)), known: []).title == nil)
+        #expect(RecordAIReply.checked(RecordAIReply(category: "とても長い種目の名前のたぐい"), known: []).category == nil)
+        #expect(RecordAIReply.parse("種目: なし") == RecordAIReply())
+    }
+}

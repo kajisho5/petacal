@@ -17,6 +17,24 @@ enum EventAI {
         場所: （文章に書かれている場所をそのまま。書かれていなければ「なし」）
         """
 
+    private static let recordInstructions = """
+        あなたは、レシートや払い戻しの画面の文字から、家計簿の「題名」と「種目」を考える係です。
+        必ず次の2行だけで答えます。ほかの文は書きません。
+        題名: （15文字以内。お店や中身が分かる短い名前。金額・日付・時刻は入れない）
+        種目: （食費、日用品、交通費、趣味、ライブ・音楽、副収入 などの短い分類。分からなければ「なし」）
+        """
+
+    /// A title and a 種目 for a record, from the text read off a photo. nil when unavailable or unusable.
+    static func recordDraft(text: String, known: [String]) async -> RecordAIReply? {
+        guard isAvailable, !text.isEmpty else { return nil }
+        let session = LanguageModelSession(instructions: recordInstructions)
+        var prompt = "写真の文字:\n\(text.prefix(1500))"
+        if !known.isEmpty { prompt += "\n\nこれまでに使った種目: " + known.prefix(12).joined(separator: "、") }
+        guard let response = try? await session.respond(to: prompt) else { return nil }
+        let checked = RecordAIReply.checked(RecordAIReply.parse(response.content), known: known)
+        return checked.title == nil && checked.category == nil ? nil : checked
+    }
+
     /// A better title and the place for one event, or nil when the model is unavailable or gave nothing usable.
     static func details(sentence: String, fullText: String, fallbackTitle: String) async -> (title: String, place: String)? {
         guard isAvailable else { return nil }

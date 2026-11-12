@@ -102,7 +102,7 @@ import UIKit
     /// `wide` draws the view the way a wide screen would (regular width), at the given size.
     /// The bars around it are not the real ones there: see `deviceRoot` for those.
     private func render(_ name: String, style: UIUserInterfaceStyle, size: CGSize = ScreenshotTests.phone,
-                        wide: Bool = false, largest: Bool = false, view: AnyView) async throws {
+                        wide: Bool = false, largest: Bool = false, freePlan: Bool = false, view: AnyView) async throws {
         let defaults = UserDefaults(suiteName: "petacal-tests-shots")!
         defaults.removePersistentDomain(forName: "petacal-tests-shots")
         let container = try ScreenshotTests.sampleContainer()
@@ -112,6 +112,7 @@ import UIKit
             .environment(ColorStore(defaults: defaults))
             .environment(LockGate(defaults: defaults))
             .environment(UndoCenter())
+            .environment(EntitlementStore(forced: !freePlan))
             .environment(AppRouter())
             .modelContainer(container)
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
@@ -166,6 +167,14 @@ import UIKit
             + (traits?.horizontalSizeClass == .regular ? "-regular" : "-compact") + posture
         try await render("\(name)-root-light", style: .light, size: .zero, view: AnyView(RootView()))
         try await render("\(name)-root-dark", style: .dark, size: .zero, view: AnyView(RootView()))
+    }
+
+    /// The free plan: the Pro screen and where the paid features are.
+    @Test func freePlan() async throws {
+        try await render("paywall-light", style: .light, freePlan: true, view: AnyView(PaywallSheet(reason: "候補日をつくるのは Pro の機能です")))
+        try await render("paywall-dark", style: .dark, freePlan: true, view: AnyView(PaywallSheet(reason: nil)))
+        try await render("stats-free-light", style: .light, freePlan: true, view: AnyView(NavigationStack { StatsScreen() }))
+        try await render("settings-free-dark", style: .dark, freePlan: true, view: AnyView(NavigationStack { SettingsScreen() }))
     }
 
     @Test func largestText() async throws {

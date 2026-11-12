@@ -10,6 +10,7 @@ struct PetacalApp: App {
     @State private var lockGate = LockGate()
     @State private var undoCenter = UndoCenter()
     @State private var router = AppRouter()
+    @State private var entitlements = EntitlementStore()
     private let notificationPresenter = NotificationPresenter()
     #if os(macOS)
     /// One store for the main window and the settings window.
@@ -35,6 +36,8 @@ struct PetacalApp: App {
                 .environment(lockGate)
                 .environment(undoCenter)
                 .environment(router)
+                .environment(entitlements)
+                .task { await entitlements.start() }
         }
         .modelContainer(container)
         .defaultSize(width: 1200, height: 780)
@@ -49,6 +52,7 @@ struct PetacalApp: App {
                 .environment(colorStore)
                 .environment(lockGate)
                 .environment(undoCenter)
+                .environment(entitlements)
                 .frame(width: 520, height: 600)
         }
         .modelContainer(container)
@@ -60,6 +64,8 @@ struct PetacalApp: App {
                 .environment(lockGate)
                 .environment(undoCenter)
                 .environment(router)
+                .environment(entitlements)
+                .task { await entitlements.start() }
         }
         .modelContainer(for: [Record.self, RecordPhoto.self])
         .commands { AppCommands(router: router) }

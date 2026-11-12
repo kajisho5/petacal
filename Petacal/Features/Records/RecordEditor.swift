@@ -13,6 +13,7 @@ struct RecordEditor: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(UndoCenter.self) private var undo
+    @Environment(EntitlementStore.self) private var entitlements
     @Query private var allRecords: [Record]
 
     @State private var kind: RecordKind
@@ -41,6 +42,10 @@ struct RecordEditor: View {
     }
 
     static let maxPhotos = 10
+    /// 1 on the free plan. Records that already have more keep them (nothing is removed).
+    private var photoLimit: Int {
+        entitlements.isPro ? RecordEditor.maxPhotos : max(EntitlementStore.freePhotos, existing?.sortedPhotos.count ?? 0)
+    }
 
     init(target: RecordTarget) {
         self.target = target
@@ -177,7 +182,7 @@ struct RecordEditor: View {
                 } header: {
                     Text("写真")
                 } footer: {
-                    Text("1件に\(RecordEditor.maxPhotos)枚まで。レシートや払い戻しの画面の写真から、金額と日付を読み取れます（この端末の中で読み取り、外には送りません）。")
+                    Text("1件に\(photoLimit)枚まで。レシートや払い戻しの画面の写真から、金額と日付を読み取れます（この端末の中で読み取り、外には送りません）。")
                 }
                 if existing != nil {
                     Section {
@@ -258,8 +263,20 @@ struct RecordEditor: View {
                 if isLoadingPhotos {
                     ProgressView().frame(width: 76, height: 76)
                 }
-                if photos.count < RecordEditor.maxPhotos {
-                    PhotosPicker(selection: $picked, maxSelectionCount: RecordEditor.maxPhotos - photos.count,
+                if photos.count >= photoLimit && photoLimit < RecordEditor.maxPhotos {
+                    Button {
+                        entitlements.ask(String(localized: "無料版は1件に1枚までです。Pro なら10枚まで"))
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: "photo.badge.plus").font(.title2)
+                            HStack(spacing: 4) { Text("写真を追加").font(.caption); ProBadge() }
+                        }
+                        .frame(width: 110, height: 76)
+                        .background(Color.fillBackground, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                } else if photos.count < photoLimit {
+                    PhotosPicker(selection: $picked, maxSelectionCount: photoLimit - photos.count,
                                  matching: .images) {
                         VStack(spacing: 4) {
                             Image(systemName: "photo.badge.plus").font(.title2)
@@ -295,7 +312,7 @@ struct RecordEditor: View {
     private func load(_ items: [PhotosPickerItem]) async {
         let wasEmpty = photos.isEmpty
         isLoadingPhotos = true
-        for item in items where photos.count < RecordEditor.maxPhotos {
+        for item in items where photos.count < photoLimit {
             if let data = try? await item.loadTransferable(type: Data.self),
                let small = PhotoShrinker.jpeg(from: data) {
                 photos.append(small)
@@ -321,7 +338,7 @@ struct RecordEditor: View {
         for old in record.photos ?? [] { context.delete(old) }
         record.photos = photos.enumerated().map { index, data in RecordPhoto(data: data, order: index) }
         try? context.save()
-        BudgetNotifier.check(context: context)
+        if entitlements.isPro { BudgetNotifier.check(context: context) }
         if existing == nil {
             let modelContext = context
             undo.show(String(localized: "記録を追加しました")) {

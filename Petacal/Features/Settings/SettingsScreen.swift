@@ -3,6 +3,9 @@ import SwiftUI
 
 struct SettingsScreen: View {
     @Environment(LockGate.self) private var lock
+    @Environment(EntitlementStore.self) private var entitlements
+    @State private var managing = false
+    @Environment(\.openURL) private var openURL
     @State private var lockUnavailable = false
     @AppStorage("budget.oshi") private var oshiBudget = 0
     @AppStorage(BudgetNotifier.enabledKey) private var budgetNotify = false
@@ -17,6 +20,19 @@ struct SettingsScreen: View {
 
     var body: some View {
         List {
+            Section {
+                LabeledContent("いまのプラン", value: entitlements.planName)
+                if !entitlements.isPro || entitlements.testUnlock {
+                    Button("Pro の内容を見る") { entitlements.ask(String(localized: "設定から開きました")) }
+                }
+                Button("購入を復元") { Task { await entitlements.restore() } }
+                if entitlements.hasSubscription {
+                    Button("サブスクリプションを管理") { managing = true }
+                }
+                NavigationLink("プライバシーポリシー") { PrivacyPolicyScreen() }
+            } header: {
+                Text("ペタカレ Pro")
+            }
             Section("表示") {
                 NavigationLink("表示するカレンダー") { VisibleCalendarsScreen() }
                 NavigationLink("カレンダーの表示") { PatternSettingsScreen() }
@@ -76,34 +92,54 @@ struct SettingsScreen: View {
             }
         }
         .navigationTitle("設定")
+        #if os(iOS)
+        .manageSubscriptionsSheet(isPresented: $managing)
+        #else
+        .onChange(of: managing) { _, open in
+            if open, let url = URL(string: "https://apps.apple.com/account/subscriptions") { openURL(url) }
+            managing = false
+        }
+        #endif
     }
 }
 
 /// 設定 → カレンダーの表示: how the month looks.
 struct PatternSettingsScreen: View {
     @AppStorage("calendar.pattern") private var patternRaw = MonthPattern.bars.rawValue
+    @Environment(EntitlementStore.self) private var entitlements
 
     var body: some View {
         List {
             Section {
                 row(.bars, title: "帯（標準）", detail: "予定の題名が見える")
                 row(.dots, title: "点と一覧", detail: "月は小さく、下に一覧")
-                row(.amount, title: "金額", detail: "その日の金額を大きく")
-                row(.photo, title: "写真", detail: "記録の写真を日ごとに並べる")
+                row(.amount, title: "金額", detail: "その日の金額を大きく", pro: true)
+                row(.photo, title: "写真", detail: "記録の写真を日ごとに並べる", pro: true)
             } footer: {
-                Text("「日」「週」の画面は、どのパターンでも同じです。")
+                Text("「日」「週」の画面は、どのパターンでも同じです。「金額」「写真」は Pro で使えます。")
             }
         }
         .navigationTitle("カレンダーの表示")
         .inlineTitle()
     }
 
-    private func row(_ pattern: MonthPattern, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
+    private func row(_ pattern: MonthPattern, title: LocalizedStringKey, detail: LocalizedStringKey,
+                     pro: Bool = false) -> some View {
         let isOn = patternRaw == pattern.rawValue
-        return Button { patternRaw = pattern.rawValue } label: {
+        let locked = pro && !entitlements.isPro
+        return Button {
+            if locked {
+                entitlements.ask(String(localized: "月の「金額」「写真」の表示は Pro で使えます"))
+            } else {
+                patternRaw = pattern.rawValue
+            }
+        } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).foregroundStyle(.primary)
+                    HStack(spacing: 6) {
+                        Text(title).foregroundStyle(.primary)
+                        if pro { ProBadge() }
+                    }
                     Text(detail).font(.footnote).foregroundStyle(.secondary)
                 }
                 Spacer()

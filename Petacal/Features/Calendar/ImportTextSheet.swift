@@ -26,6 +26,9 @@ struct ImportTextSheet: View {
     /// The on-device model is tidying titles and looking for places.
     @State private var refining: Task<Void, Never>?
     @State private var refinedCount = 0
+    /// The free plan's AI reads for this month are used up (the dates are still read without AI).
+    @State private var quotaUsedUp = false
+    @Environment(EntitlementStore.self) private var entitlements
     private let searchNow: Bool
 
     struct Candidate: Identifiable {
@@ -134,6 +137,17 @@ struct ImportTextSheet: View {
                             }
                             .padding(.vertical, 4)
                         }
+                        if quotaUsedUp {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("今月の AI 読み取り（無料版は月\(MonthlyQuota.freeLimit)回）を使い切りました。日付と時刻はこれまでどおり読み取れます。")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Button("Pro の内容を見る") {
+                                    entitlements.ask(String(localized: "AI 読み取りは無料版で月\(MonthlyQuota.freeLimit)回までです"))
+                                }
+                                .font(.footnote)
+                            }
+                        }
                         if refining != nil {
                             HStack(spacing: 8) {
                                 ProgressView()
@@ -152,7 +166,12 @@ struct ImportTextSheet: View {
                         Text("見つかった予定（\(found.count)件）")
                     } footer: {
                         if refinedCount > 0 || refining != nil {
-                            Text("日付と時刻はアプリが計算し、題名と場所だけを AI が読み取ります。AI はこの端末の中で動き、文章を外に送りません。まちがいがあれば、追加する前に直してください。")
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("日付と時刻はアプリが計算し、題名と場所だけを AI が読み取ります。AI はこの端末の中で動き、文章を外に送りません。まちがいがあれば、追加する前に直してください。")
+                                if !entitlements.isPro {
+                                    Text("AI 読み取り 今月の残り \(AIQuota.remaining()) 回（無料版）")
+                                }
+                            }
                         } else {
                             Text("題名は文章から機械的に切り出したものです。追加する前に直せます。時刻がないものは終日の予定になります。")
                         }
@@ -247,7 +266,13 @@ struct ImportTextSheet: View {
     /// Asks the on-device model for a tidier title and the place, one event at a time.
     /// Does nothing where the model is unavailable: the mechanical titles stay as they are.
     private func refine() {
+        quotaUsedUp = false
         guard EventAI.isAvailable, !found.isEmpty else { return }
+        // One search uses one of the free plan's monthly AI reads.
+        if !entitlements.isPro, !AIQuota.consume() {
+            quotaUsedUp = true
+            return
+        }
         let fullText = text
         let jobs = found.map { (id: $0.id, sentence: $0.sentence, plainTitle: $0.plainTitle) }
         refining = Task {
@@ -338,5 +363,25 @@ private extension Optional {
     func asyncMap<T>(_ transform: (Wrapped) async -> T) async -> T? {
         guard let value = self else { return nil }
         return await transform(value)
+    }
+}
+
+/// The free plan's AI reads (PetaCore's MonthlyQuota, kept on this device).
+enum AIQuota {
+    private static let key = "ai.quota"
+
+    private static func load(_ defaults: UserDefaults) -> MonthlyQuota {
+        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(MonthlyQuota.self, from: $0) } ?? MonthlyQuota()
+    }
+
+    static func remaining(now: Date = Date(), defaults: UserDefaults = .standard) -> Int {
+        load(defaults).remaining(monthKey: MonthlyQuota.key(for: now, calendar: .current))
+    }
+
+    static func consume(now: Date = Date(), defaults: UserDefaults = .standard) -> Bool {
+        var quota = load(defaults)
+        let ok = quota.consume(monthKey: MonthlyQuota.key(for: now, calendar: .current))
+        if ok, let data = try? JSONEncoder().encode(quota) { defaults.set(data, forKey: key) }
+        return ok
     }
 }

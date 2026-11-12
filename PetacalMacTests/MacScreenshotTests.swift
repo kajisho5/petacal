@@ -70,7 +70,7 @@ import Testing
     }
 
     private func render(_ name: String, dark: Bool, size: CGSize = CGSize(width: 1200, height: 780),
-                        section: AppRouter.Section = .calendar, view: AnyView? = nil) async throws {
+                        section: AppRouter.Section = .calendar, freePlan: Bool = false, view: AnyView? = nil) async throws {
         let defaults = UserDefaults(suiteName: "petacal-mac-tests-shots")!
         defaults.removePersistentDomain(forName: "petacal-mac-tests-shots")
         UserDefaults.standard.set(CalendarMode.month.rawValue, forKey: "calendar.mode")
@@ -82,6 +82,7 @@ import Testing
             .environment(ColorStore(defaults: defaults))
             .environment(LockGate(defaults: defaults))
             .environment(UndoCenter())
+            .environment(EntitlementStore(forced: !freePlan))
             .environment(router)
             .modelContainer(try MacScreenshotTests.sampleContainer())
         let controller = NSHostingController(rootView: root)
@@ -126,6 +127,11 @@ import Testing
         let data = try #require(rep.representation(using: .png, properties: [:]))
         try FileManager.default.createDirectory(at: MacScreenshotTests.folder, withIntermediateDirectories: true)
         try data.write(to: MacScreenshotTests.folder.appendingPathComponent("mac-real-window.png"))
+    }
+
+    @Test func paywall() async throws {
+        try await render("mac-paywall-light", dark: false, size: CGSize(width: 540, height: 760), freePlan: true,
+                         view: AnyView(PaywallSheet(reason: nil).sheetSize()))
     }
 
     @Test func sheetsAndSettings() async throws {

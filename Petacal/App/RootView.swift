@@ -6,6 +6,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(UndoCenter.self) private var undo
     @Environment(AppRouter.self) private var router
+    @Environment(EntitlementStore.self) private var entitlements
     @Environment(CalendarStore.self) private var store
     @Environment(ColorStore.self) private var colors
     @Environment(\.colorScheme) private var scheme
@@ -51,6 +52,10 @@ struct RootView: View {
         }
         // Smaller than this and the month can no longer show its bars (design-spec B-4).
         .frame(minWidth: 800, minHeight: 560)
+        .sheet(isPresented: Binding(get: { entitlements.paywallReason != nil },
+                                    set: { if !$0 { entitlements.paywallReason = nil } })) {
+            PaywallSheet(reason: entitlements.paywallReason).sheetSize()
+        }
         .overlay(alignment: .bottom) {
             UndoBanner()
                 .frame(maxWidth: 520)
@@ -66,6 +71,7 @@ struct RootView: View {
 struct RootView: View {
     @Environment(UndoCenter.self) private var undo
     @Environment(AppRouter.self) private var router
+    @Environment(EntitlementStore.self) private var entitlements
 
     var body: some View {
         @Bindable var router = router
@@ -88,6 +94,10 @@ struct RootView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .sheet(isPresented: Binding(get: { entitlements.paywallReason != nil },
+                                    set: { if !$0 { entitlements.paywallReason = nil } })) {
+            PaywallSheet(reason: entitlements.paywallReason).sheetSize()
+        }
         .overlay(alignment: .bottom) {
             UndoBanner()
                 .frame(maxWidth: 520)
@@ -105,5 +115,6 @@ struct RootView: View {
         .environment(LockGate())
         .environment(UndoCenter())
         .environment(AppRouter())
+        .environment(EntitlementStore(forced: false))
         .modelContainer(for: [Record.self, RecordPhoto.self], inMemory: true)
 }

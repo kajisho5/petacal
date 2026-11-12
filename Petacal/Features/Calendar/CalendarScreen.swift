@@ -73,6 +73,7 @@ struct CalendarScreen: View {
     }
     /// Missing in previews and tests that show this screen on its own.
     @Environment(AppRouter.self) private var router: AppRouter?
+    @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
     @Query private var records: [Record]
     @AppStorage("calendar.mode") private var modeRaw = CalendarMode.month.rawValue
     @AppStorage("calendar.pattern") private var patternRaw = MonthPattern.bars.rawValue
@@ -84,7 +85,12 @@ struct CalendarScreen: View {
     private var calendar: Calendar { store.calendar }
     private var today: DayKey { DayKey(date: Date(), calendar: calendar) }
     private var mode: CalendarMode { CalendarMode(rawValue: modeRaw) ?? .month }
-    private var pattern: MonthPattern { MonthPattern(rawValue: patternRaw) ?? .bars }
+    private var pattern: MonthPattern {
+        let chosen = MonthPattern(rawValue: patternRaw) ?? .bars
+        // After Pro ends, the paid looks fall back to the free one (the choice is kept for later).
+        if (chosen == .amount || chosen == .photo), entitlements?.isPro == false { return .bars }
+        return chosen
+    }
     private var month: MonthRef { MonthRef(year: focus.year, month: focus.month) }
 
     private var title: String {
@@ -149,7 +155,13 @@ struct CalendarScreen: View {
                         sheet = .importText
                     }
                     .disabled(store.access != .granted)
-                    Button("候補日をつくる（空き時間）", systemImage: "calendar.badge.clock") { sheet = .slots }
+                    Button("候補日をつくる（空き時間）", systemImage: "calendar.badge.clock") {
+                        if entitlements?.isPro == false {
+                            entitlements?.ask(String(localized: "候補日をつくるのは Pro の機能です"))
+                        } else {
+                            sheet = .slots
+                        }
+                    }
                         .disabled(store.access != .granted)
                     Divider()
                     Button("記録を追加", systemImage: "square.and.pencil") {

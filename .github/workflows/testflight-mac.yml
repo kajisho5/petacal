@@ -1,4 +1,4 @@
-# Mac 版を TestFlight に送る（kajisho5/runway の macos 枝。動作を確かめたら main に入れる）
+# Mac 版を TestFlight に送る（kajisho5/runway の共通ワークフロー、platform: macos）
 name: testflight-mac
 
 on:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   macos:
-    uses: kajisho5/runway/.github/workflows/apple-testflight.yml@macos
+    uses: kajisho5/runway/.github/workflows/apple-testflight.yml@main
     with:
       bundle_id: com.seventhwell.petacal
       project: Petacal.xcodeproj

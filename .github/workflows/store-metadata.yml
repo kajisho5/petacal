@@ -1,0 +1,34 @@
+# Puts the App Store text of store/metadata-ja.md into App Store Connect (tools/asc_metadata.py).
+# Safe to run again. Never submits for review. "check" only reads and prints what would change.
+# The App Store Connect key comes from runway's sync-secrets (ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64).
+name: store-metadata
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = 読むだけ / apply = 書き込む"
+        type: choice
+        options: [check, apply]
+        default: check
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check the lengths
+        run: python3 tools/check_metadata.py
+      - name: Install the JWT library
+        run: pip install --quiet "pyjwt[crypto]"
+      - name: Put the text into App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          BUNDLE_ID: com.seventhwell.petacal
+          MODE: ${{ inputs.mode }}
+        run: python3 tools/asc_metadata.py $([ "$MODE" = apply ] || echo --dry-run)

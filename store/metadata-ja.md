@@ -105,7 +105,7 @@ Pro では、種類別の集計、予算と通知、月のまとめ画像、候�
 <!-- field:reviewNotes -->
 ログインはありません。起動してすぐにすべての画面を確認できます。
 カレンダーの許可を断っても、記録・集計は使えます。
-Pro の機能は、App 内課金（年額・月額・買い切り）で開きます。設定 →「Pro」→「購入を復元」もあります。
+Pro の機能は、App 内課金（年額・月額・買い切り）で開きます。「設定」タブに「購入を復元」もあります。
 AI による読み取りは、Apple Intelligence に対応した端末でのみ動き、それ以外の端末では表示されません。
 <!-- /field -->
 
@@ -114,7 +114,7 @@ AI による読み取りは、Apple Intelligence に対応した端末でのみ�
 | 項目 | 状態 |
 |---|---|
 | 名前 | 「ペタカレ」は仮称。App Store 上で同じ名前のアプリは見つからなかった（2026-11-12 に Web 検索で確認）。似た名前に「ペアカレ」（シフト共有のカレンダー）がある。商標は未確認 |
-| プライバシーポリシーの URL | ページの文は `store/privacy.html` に用意。どこで公開するかが未定 |
-| サポートの URL | 必須。未定（プライバシーポリシーと同じ場所に問い合わせ先のページを置く案） |
-| 問い合わせ先のメールアドレス | 未定（案：info@seventh-well.com） |
+| プライバシーポリシーの URL | https://seventh-well.com/petacal/privacy/ （元の文は `store/privacy.html`。公式サイトのリポジトリ kajisho5/seventhwell-live の `public/petacal/privacy/index.html` に置く） |
+| サポートの URL | https://seventh-well.com/petacal/ （元の文は `store/support.html`） |
+| 問い合わせ先のメールアドレス | info@seventh-well.com（本人が了承、2026-11-12） |
 | スクリーンショット | 自動チェックのテスト `storeShots` が、iPhone（1206×2622・1320×2868）、iPad 13インチ（2064×2752）、iPhone Duo の外側（1398×2034）、Mac（1440×900）で4枚ずつ撮る。`python3 tools/store_screenshots.py <画像のフォルダ> <出力>` で、受け付けられる寸法だけを選び、透明の部分を消す。App Store Connect へのアップロードは未着手（名前と URL が決まってから）。Mac の画像は、横のメニューの選んだ行が黒い帯になり使えない（すべての Mac の画像で同じ。撮り方の限界と推測。実際の Mac での見え方は未確認） |

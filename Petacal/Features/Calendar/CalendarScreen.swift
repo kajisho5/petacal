@@ -88,6 +88,8 @@ struct CalendarScreen: View {
     @State private var fade: Double = 1
     @State private var pageWidth: CGFloat = 390
     @State private var paging = false
+    /// Where a jump goes ("今日" from far away): drawn beside the page on screen while it slides in.
+    @State private var incoming: (day: DayKey, direction: Int)?
 
     private var calendar: Calendar { store.calendar }
     private var today: DayKey { DayKey(date: Date(), calendar: calendar) }
@@ -224,38 +226,21 @@ struct CalendarScreen: View {
         }
     }
 
-    private var grid: MonthGrid { MonthGrid(year: focus.year, month: focus.month, calendar: calendar) }
+    /// The pages beside the one on screen, drawn only while it moves (then they slide in next to it).
+    private var showsNeighbors: Bool { slide != 0 || paging }
 
     @ViewBuilder private var content: some View {
-        Group {
-            switch mode {
-            case .month:
-                GeometryReader { proxy in
-                    // Decided by the room there is, not by the kind of device.
-                    let split = isRegularWidth
-                        ? PaneSplit.compute(width: proxy.size.width, fold: FoldReader.fold(in: proxy)) : nil
-                    if let split {
-                        wideMonth(split)
-                    } else if pattern != .bars {
-                        MonthCompactView(style: pattern, grid: grid, today: today, focus: $focus, sheet: $sheet) {
-                            addAllDay(on: $0)
-                        }
-                    } else {
-                        MonthBarsView(grid: grid, today: today,
-                                      amounts: lock.isLocked ? [:] : records.totalsByDay(calendar: calendar)) {
-                            sheet = .day($0)
-                        } onLongPress: { addAllDay(on: $0) }
-                    }
-                }
-            case .week:
-                TimelineScreen(days: focus.week(calendar: calendar), today: today, focus: $focus, sheet: $sheet,
-                               pressCount: $pressCount)
-            case .day:
-                TimelineScreen(days: [focus], today: today, focus: $focus, sheet: $sheet, pressCount: $pressCount)
+        ZStack {
+            if showsNeighbors && !reduceMotion {
+                pageView(incoming?.direction == -1 ? incoming!.day : shifted(focus, by: -1), live: false)
+                    .offset(x: slide - pageWidth)
+                pageView(incoming?.direction == 1 ? incoming!.day : shifted(focus, by: 1), live: false)
+                    .offset(x: slide + pageWidth)
             }
+            pageView(focus, live: true)
+                .offset(x: slide)
+                .opacity(fade)
         }
-        .offset(x: slide)
-        .opacity(fade)
         .clipped()
         .contentShape(Rectangle())
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = max($0, 1) }
@@ -283,22 +268,60 @@ struct CalendarScreen: View {
         .onChange(of: modeRaw) { settle() }
     }
 
+    /// One page: the month, week or day that `day` is in. Only the page on screen (`live`) can be touched;
+    /// the ones beside it are pictures that follow the finger.
+    @ViewBuilder private func pageView(_ day: DayKey, live: Bool) -> some View {
+        let grid = MonthGrid(year: day.year, month: day.month, calendar: calendar)
+        let focusBinding = live ? $focus : .constant(day)
+        let sheetBinding = live ? $sheet : .constant(nil)
+        Group {
+            switch mode {
+            case .month:
+                GeometryReader { proxy in
+                    // Decided by the room there is, not by the kind of device.
+                    let split = isRegularWidth
+                        ? PaneSplit.compute(width: proxy.size.width, fold: FoldReader.fold(in: proxy)) : nil
+                    if let split {
+                        wideMonth(split, day: day, grid: grid, live: live)
+                    } else if pattern != .bars {
+                        MonthCompactView(style: pattern, grid: grid, today: today, focus: focusBinding,
+                                         sheet: sheetBinding) { addAllDay(on: $0) }
+                    } else {
+                        MonthBarsView(grid: grid, today: today,
+                                      amounts: lock.isLocked ? [:] : records.totalsByDay(calendar: calendar)) {
+                            sheet = .day($0)
+                        } onLongPress: { addAllDay(on: $0) }
+                    }
+                }
+            case .week:
+                TimelineScreen(days: day.week(calendar: calendar), today: today, focus: focusBinding,
+                               sheet: sheetBinding, pressCount: live ? $pressCount : .constant(0))
+            case .day:
+                TimelineScreen(days: [day], today: today, focus: focusBinding, sheet: sheetBinding,
+                               pressCount: live ? $pressCount : .constant(0))
+            }
+        }
+        .allowsHitTesting(live)
+        .accessibilityHidden(!live)
+    }
+
     private func settle() {
         paging = false
         slide = 0
         fade = 1
+        incoming = nil
     }
 
-    /// Previous / next page with the slide (the buttons, swiping and ⌘ shortcuts all come here).
+    /// Previous / next page (the buttons, swiping and ⌘ shortcuts all come here).
     private func go(by step: Int) {
-        page(step) { move(by: step) }
+        page(to: shifted(focus, by: step), direction: step)
     }
 
     /// Jumps to a day, sliding the way the calendar goes (a day on the page already on screen just gets selected).
     private func jump(to day: DayKey) {
         let target = pageKey(of: day), current = pageKey(of: focus)
         guard target != current else { focus = day; return }
-        page(target > current ? 1 : -1) { focus = day }
+        page(to: day, direction: target > current ? 1 : -1)
     }
 
     /// The first day of the page a day is on: its month, its week or the day itself.
@@ -310,39 +333,47 @@ struct CalendarScreen: View {
         }
     }
 
-    /// The old page leaves on the side the finger went, the new one comes in from the other side (about 0.3 s).
-    /// With Reduce Motion on, a short fade instead.
-    private func page(_ direction: Int, change: @escaping () -> Void) {
+    /// The page beside the one on screen slides in with it (about 0.3 s); when it has arrived it becomes
+    /// the page on screen, so nothing jumps. With Reduce Motion on, a short fade instead.
+    private func page(to target: DayKey, direction: Int) {
         guard !paging else { return }
         paging = true
         if reduceMotion {
             slide = 0
             withAnimation(.easeOut(duration: 0.1)) { fade = 0.2 } completion: {
-                change()
+                focus = target
                 withAnimation(.easeIn(duration: 0.15)) { fade = 1 } completion: { paging = false }
             }
             return
         }
-        let out = direction > 0 ? -pageWidth : pageWidth
-        withAnimation(.easeIn(duration: 0.12)) { slide = out } completion: {
-            change()
-            slide = -out
-            withAnimation(.spring(duration: 0.3, bounce: 0.1)) { slide = 0 } completion: { paging = false }
+        incoming = (target, direction)
+        withAnimation(.spring(duration: 0.32, bounce: 0.05)) {
+            slide = direction > 0 ? -pageWidth : pageWidth
+        } completion: {
+            var quiet = Transaction()
+            quiet.disablesAnimations = true
+            withTransaction(quiet) {
+                focus = target
+                slide = 0
+                incoming = nil
+                paging = false
+            }
         }
     }
 
     /// Wide screens: the month on the leading side, the chosen day's list on the trailing side.
     /// On a foldable the two halves meet at the fold, and nothing is drawn on it while it is partly folded.
-    private func wideMonth(_ split: PaneSplit) -> some View {
+    private func wideMonth(_ split: PaneSplit, day: DayKey, grid: MonthGrid, live: Bool) -> some View {
         HStack(alignment: .top, spacing: split.gap) {
             Group {
                 if split.compactMonth || pattern != .bars {
                     MonthCompactView(style: pattern == .bars ? .amount : pattern, grid: grid, today: today,
-                                     focus: $focus, sheet: $sheet, showsDay: false) { addAllDay(on: $0) }
+                                     focus: live ? $focus : .constant(day), sheet: live ? $sheet : .constant(nil),
+                                     showsDay: false) { addAllDay(on: $0) }
                 } else {
                     MonthBarsView(grid: grid, today: today,
                                   amounts: lock.isLocked ? [:] : records.totalsByDay(calendar: calendar),
-                                  selected: focus) {
+                                  selected: day) {
                         focus = $0
                     } onLongPress: { addAllDay(on: $0) }
                     .padding(.leading)
@@ -350,7 +381,7 @@ struct CalendarScreen: View {
             }
             .frame(width: split.leading)
             ScrollView {
-                DaySidePane(day: focus, today: today, sheet: $sheet)
+                DaySidePane(day: day, today: today, sheet: live ? $sheet : .constant(nil))
                     .padding(.trailing)
                     .padding(.bottom, 24)
             }
@@ -358,16 +389,17 @@ struct CalendarScreen: View {
         }
     }
 
-    /// Previous / next month, week or day. The buttons do the same as swiping sideways.
-    private func move(by step: Int) {
+    /// The day a page further on (or back) opens on: the 1st of the month (today in today's month),
+    /// the same weekday a week on, or the next day.
+    private func shifted(_ day: DayKey, by step: Int) -> DayKey {
         switch mode {
         case .month:
-            let next = MonthGrid.shifted(year: focus.year, month: focus.month, by: step)
+            let next = MonthGrid.shifted(year: day.year, month: day.month, by: step)
             let now = today
-            focus = (now.year == next.year && now.month == next.month)
+            return (now.year == next.year && now.month == next.month)
                 ? now : DayKey(year: next.year, month: next.month, day: 1)
-        case .week: focus = focus.adding(days: 7 * step, calendar: calendar)
-        case .day: focus = focus.adding(days: step, calendar: calendar)
+        case .week: return day.adding(days: 7 * step, calendar: calendar)
+        case .day: return day.adding(days: step, calendar: calendar)
         }
     }
 
@@ -378,12 +410,13 @@ struct CalendarScreen: View {
         sheet = .new(date, allDay: true)
     }
 
-    /// Loads the month on screen plus the weeks around it (week view can reach into the next month).
+    /// Loads the month on screen and the months on each side (they show while a swipe slides them in;
+    /// week view can reach into the next month too).
     private func loadAround() {
         let first = DayKey(year: focus.year, month: focus.month, day: 1)
         guard let start = first.date(calendar: calendar),
-              let from = calendar.date(byAdding: .day, value: -8, to: start),
-              let to = calendar.date(byAdding: .day, value: 40, to: start) else { return }
+              let from = calendar.date(byAdding: .day, value: -40, to: start),
+              let to = calendar.date(byAdding: .day, value: 72, to: start) else { return }
         store.load(from: from, to: to)
     }
 

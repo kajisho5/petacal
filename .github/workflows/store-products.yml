@@ -1,0 +1,25 @@
+# Creates ペタカレ Pro's products in App Store Connect (tools/asc_products.py). Safe to run again.
+# The App Store Connect key comes from runway's sync-secrets (ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64).
+name: store-products
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  products:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the JWT library
+        run: pip install --quiet "pyjwt[crypto]"
+      - name: Create the products
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          BUNDLE_ID: com.seventhwell.petacal
+          SCREENSHOT: design/mocks/iphone-S-07-light.png
+        run: python3 tools/asc_products.py

@@ -201,7 +201,35 @@ struct RecordDetailPane: View {
 struct RecordRow: View {
     let record: Record
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
+        if typeSize.isAccessibilitySize {
+            // The largest sizes: one column, the amount under the title, the decorative picture left out.
+            VStack(alignment: .leading, spacing: 4) {
+                Text(verbatim: record.displayTitle)
+                    .font(.body.weight(.medium))
+                    .lineLimit(3)
+                Text(verbatim: [record.kind.label, record.category].filter { !$0.isEmpty && $0 != record.displayTitle }
+                    .joined(separator: "／"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let amount = record.countedAmount {
+                    Text(verbatim: Yen.signed(amount))
+                        .font(.body.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.amount(amount))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .combine)
+        } else {
+            regular
+        }
+    }
+
+    private var regular: some View {
         HStack(spacing: 12) {
             RecordThumb(record: record)
             VStack(alignment: .leading, spacing: 2) {

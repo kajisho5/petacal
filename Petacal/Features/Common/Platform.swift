@@ -136,6 +136,19 @@ enum Clipboard {
 }
 
 enum SystemSettings {
+    /// Opens this app's notification settings.
+    static func openNotifications() {
+        #if os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+        #else
+        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #endif
+    }
+
     /// Opens the place where calendar access is granted.
     static func openPrivacy() {
         #if os(macOS)

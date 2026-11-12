@@ -14,10 +14,20 @@ struct MonthBarsView: View {
     let onLongPress: (DayKey) -> Void
 
     @Environment(CalendarStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .caption2) private var laneHeight: CGFloat = 20
     @ScaledMetric(relativeTo: .footnote) private var numberHeight: CGFloat = 30
 
     var body: some View {
+        if typeSize.isAccessibilitySize {
+            // Titles cannot fit at the largest sizes: the day and how many events it has.
+            MonthCountView(grid: grid, today: today, selected: selected, onTap: onTap, onLongPress: onLongPress)
+        } else {
+            bars
+        }
+    }
+
+    private var bars: some View {
         GeometryReader { geo in
             let headerHeight: CGFloat = 24
             let minimum = numberHeight + laneHeight * 2 + 4
@@ -41,6 +51,59 @@ struct MonthBarsView: View {
                 }
             }
         }
+    }
+}
+
+/// The month at the accessibility text sizes: each day with the number of its events (design-spec B-4).
+/// The amounts move to the day's sheet, where there is room for them.
+struct MonthCountView: View {
+    let grid: MonthGrid
+    let today: DayKey
+    var selected: DayKey?
+    let onTap: (DayKey) -> Void
+    let onLongPress: (DayKey) -> Void
+
+    @Environment(CalendarStore.self) private var store
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 4) {
+                WeekdayHeader(symbols: grid.weekdaySymbols)
+                LazyVGrid(columns: columns, spacing: 6) {
+                    ForEach(Array(grid.weeks.joined().enumerated()), id: \.offset) { _, number in
+                        if let number {
+                            cell(DayKey(year: grid.year, month: grid.month, day: number))
+                        } else {
+                            Color.clear.frame(minHeight: 44)
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+    }
+
+    private func cell(_ day: DayKey) -> some View {
+        let count = store.events(on: day).count
+        return VStack(spacing: 2) {
+            DayNumber(day: day, isToday: day == today, isSelected: day == selected)
+            Text(verbatim: count > 0 ? "\(count)" : " ")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap(day) }
+        .onLongPressGesture(minimumDuration: 0.4) { onLongPress(day) }
+        .accessibilityElement()
+        .accessibilityLabel(Text(verbatim: "\(day.month)月\(day.day)日" + (day == today ? " 今日" : "")
+            + (count > 0 ? " 予定\(count)件" : " " + String(localized: "予定なし"))))
+        .accessibilityAddTraits(day == selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { onTap(day) }
+        .accessibilityAction(named: Text("予定を追加")) { onLongPress(day) }
     }
 }
 
@@ -175,6 +238,8 @@ struct DayNumber: View {
             Text(verbatim: String(day.day))
                 .font(.footnote)
                 .fontWeight(isToday ? .bold : .regular)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .foregroundStyle(isToday ? Color.white : Color.primary)
                 .padding(.horizontal, 5)
                 .frame(minWidth: 24, minHeight: 24)

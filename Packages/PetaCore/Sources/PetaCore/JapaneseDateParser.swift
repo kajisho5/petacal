@@ -62,6 +62,11 @@ public enum JapaneseDateParser {
             guard let y = number(m, 1), let mo = number(m, 2), let d = number(m, 3) else { return nil }
             return DayKey(year: y, month: mo, day: d)
         }
+        // 2026/11/18, 2026-11-18, 2026.11.18 (receipts and statements)
+        each(#"(?<!\d)(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})(?!\d)"#) { m in
+            guard let y = number(m, 1), let mo = number(m, 2), let d = number(m, 3), (1...12).contains(mo) else { return nil }
+            return DayKey(year: y, month: mo, day: d)
+        }
         // 11月18日 / 11/18 (no year: this year, or next year when that is more than a month ago)
         let monthDay: (NSTextCheckingResult) -> DayKey? = { m in
             guard let mo = number(m, 1), let d = number(m, 2), (1...12).contains(mo) else { return nil }

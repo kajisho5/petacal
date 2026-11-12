@@ -11,6 +11,7 @@ struct StatsScreen: View {
     @State private var month = StatsScreen.currentMonth()
     @State private var showSummary = false
     @AppStorage("budget.oshi") private var oshiBudget = 0
+    @Environment(EntitlementStore.self) private var entitlements
 
     private static func currentMonth() -> MonthRef {
         let today = DayKey(date: Date(), calendar: .current)
@@ -56,14 +57,22 @@ struct StatsScreen: View {
                             if !monthRecords.isEmpty {
                                 totalCard
                                 dailyCard
-                                if oshiBudget > 0 { budgetCard }
-                                if !stats.byCategory.isEmpty { categoryCard }
+                                if entitlements.isPro {
+                                    if oshiBudget > 0 { budgetCard }
+                                    if !stats.byCategory.isEmpty { categoryCard }
+                                } else {
+                                    proCard
+                                }
                             }
                             trendCard
                         }
                         if !monthRecords.isEmpty {
                             Button {
-                                showSummary = true
+                                if entitlements.isPro {
+                                    showSummary = true
+                                } else {
+                                    entitlements.ask(String(localized: "まとめ画像は Pro の機能です"))
+                                }
                             } label: {
                                 Label("まとめ画像をつくる", systemImage: "photo")
                                     .frame(maxWidth: 520, minHeight: 44)
@@ -148,6 +157,21 @@ struct StatsScreen: View {
             }
             .chartXScale(domain: 1...max(grid.dayCount, 2))
             .frame(height: 200)
+        }
+    }
+
+    /// Free plan: where the paid cards would be.
+    private var proCard: some View {
+        Card {
+            HStack(spacing: 6) {
+                Text("種目ごとの合計・予算").font(.headline)
+                ProBadge()
+            }
+            Text("種目ごとの収支と、推し活・趣味の予算は Pro で使えます。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Pro の内容を見る") { entitlements.ask(String(localized: "集計の種目別と予算は Pro の機能です")) }
+                .buttonStyle(.bordered)
         }
     }
 

@@ -8,6 +8,7 @@ import UIKit
 
 /// S-14 写真をまとめて追加: pick many photos; they become one record per day they were taken.
 struct BulkPhotosSheet: View {
+    @Environment(EntitlementStore.self) private var entitlements
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(CalendarStore.self) private var store
@@ -40,7 +41,7 @@ struct BulkPhotosSheet: View {
                         }
                     }
                 } footer: {
-                    Text("写真を撮った日ごとに、1件の記録にまとめます（1件に\(RecordEditor.maxPhotos)枚まで。多い日は分けます）。撮った日が分からない写真は今日の記録になります。一度に\(BulkPhotosSheet.maxPhotos)枚まで選べます。")
+                    Text("写真を撮った日ごとに、1件の記録にまとめます（1件に\(RecordEditor.maxPhotos)枚まで。多い日は分けます）。撮った日が分からない写真は今日の記録になります。無料版は1枚ごとに1件の記録になります（同じ日をまとめるのは Pro）。一度に\(BulkPhotosSheet.maxPhotos)枚まで選べます。")
                 }
                 if !photos.isEmpty {
                     Section {
@@ -112,8 +113,10 @@ struct BulkPhotosSheet: View {
         for group in groups {
             guard let day = group.day.date(calendar: store.calendar) else { continue }
             // At most 10 photos per record: a busy day becomes several records.
-            for start in stride(from: 0, to: group.indices.count, by: RecordEditor.maxPhotos) {
-                let slice = group.indices[start..<min(start + RecordEditor.maxPhotos, group.indices.count)]
+            // Free plan: one photo, one record. Pro: up to 10 photos of the same day in one record.
+            let size = entitlements.isPro ? RecordEditor.maxPhotos : EntitlementStore.freePhotos
+            for start in stride(from: 0, to: group.indices.count, by: size) {
+                let slice = group.indices[start..<min(start + size, group.indices.count)]
                 let record = Record(day: day, kind: kind)
                 record.source = "bulk"
                 context.insert(record)

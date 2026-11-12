@@ -62,6 +62,7 @@ struct CalendarScreen: View {
     @Environment(LockGate.self) private var lock
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var widthClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// A Mac window is always treated as wide enough to decide by its real width.
     private var isRegularWidth: Bool {
         #if os(macOS)
@@ -72,6 +73,7 @@ struct CalendarScreen: View {
     }
     /// Missing in previews and tests that show this screen on its own.
     @Environment(AppRouter.self) private var router: AppRouter?
+    @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
     @Query private var records: [Record]
     @AppStorage("calendar.mode") private var modeRaw = CalendarMode.month.rawValue
     @AppStorage("calendar.pattern") private var patternRaw = MonthPattern.bars.rawValue
@@ -83,7 +85,12 @@ struct CalendarScreen: View {
     private var calendar: Calendar { store.calendar }
     private var today: DayKey { DayKey(date: Date(), calendar: calendar) }
     private var mode: CalendarMode { CalendarMode(rawValue: modeRaw) ?? .month }
-    private var pattern: MonthPattern { MonthPattern(rawValue: patternRaw) ?? .bars }
+    private var pattern: MonthPattern {
+        let chosen = MonthPattern(rawValue: patternRaw) ?? .bars
+        // After Pro ends, the paid looks fall back to the free one (the choice is kept for later).
+        if (chosen == .amount || chosen == .photo), entitlements?.isPro == false { return .bars }
+        return chosen
+    }
     private var month: MonthRef { MonthRef(year: focus.year, month: focus.month) }
 
     private var title: String {
@@ -148,7 +155,13 @@ struct CalendarScreen: View {
                         sheet = .importText
                     }
                     .disabled(store.access != .granted)
-                    Button("候補日をつくる（空き時間）", systemImage: "calendar.badge.clock") { sheet = .slots }
+                    Button("候補日をつくる（空き時間）", systemImage: "calendar.badge.clock") {
+                        if entitlements?.isPro == false {
+                            entitlements?.ask(String(localized: "候補日をつくるのは Pro の機能です"))
+                        } else {
+                            sheet = .slots
+                        }
+                    }
                         .disabled(store.access != .granted)
                     Divider()
                     Button("記録を追加", systemImage: "square.and.pencil") {
@@ -165,6 +178,12 @@ struct CalendarScreen: View {
         .calendarSheets($sheet)
         .sensoryFeedback(.impact(weight: .medium), trigger: pressCount)
         .task(id: month) { loadAround() }
+        .onAppear {
+            // At the largest text sizes the day view reads best: the default until the person picks another.
+            if typeSize.isAccessibilitySize, UserDefaults.standard.object(forKey: "calendar.mode") == nil {
+                modeRaw = CalendarMode.day.rawValue
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged).receive(on: RunLoop.main)) { _ in
             store.reload()
         }
@@ -411,6 +430,8 @@ private struct MonthTotalsLine: View {
     let month: MonthRef
     let calendar: Calendar
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
         let inMonth = records.filter {
             let day = DayKey(date: $0.day, calendar: calendar)
@@ -418,7 +439,9 @@ private struct MonthTotalsLine: View {
         }
         let stats = StatsCalculator.monthStats(inMonth.map { RecordAmount(kind: $0.kind, category: $0.category, amount: $0.amount) })
         if stats.plusCount + stats.minusCount + stats.oshiCount > 0 {
-            HStack(spacing: 12) {
+            let layout = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2)) : AnyLayout(HStackLayout(spacing: 12))
+            layout {
                 if stats.plusCount + stats.minusCount > 0 {
                     Text(verbatim: String(localized: "収支") + " " + Yen.signed(stats.balanceTotal))
                         .foregroundStyle(Color.amount(stats.balanceTotal))
@@ -427,8 +450,8 @@ private struct MonthTotalsLine: View {
                     Text(verbatim: String(localized: "推し活・趣味") + " " + Yen.plain(stats.oshiSpent))
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .font(.footnote.weight(.semibold))
             .monospacedDigit()
             .padding(.horizontal)

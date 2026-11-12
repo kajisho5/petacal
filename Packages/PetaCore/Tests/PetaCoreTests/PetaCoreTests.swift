@@ -553,3 +553,42 @@ private func at(_ y: Int, _ mo: Int, _ d: Int, _ h: Int = 0, _ mi: Int = 0) -> D
         #expect(found[0].sentence.contains("18日"))
     }
 }
+
+@Suite struct ReceiptReaderTests {
+    private let now = at(2026, 11, 11, 9, 41)
+
+    @Test func readsTheTotalOfAReceipt() {
+        let draft = ReceiptReader.read("そらまめ商店\n小計 1,000円\n合計 ¥1,100\n2026/11/10 12:34", now: now, calendar: jst)
+        #expect(draft.amount == 1100)
+        #expect(draft.isPlus == false)
+        #expect(draft.day == DayKey(year: 2026, month: 11, day: 10))
+    }
+
+    @Test func readsMoneyThatCameIn() {
+        #expect(ReceiptReader.read("的中！ 払戻金 3,200円", now: now, calendar: jst) == ReceiptDraft(amount: 3200, isPlus: true))
+        #expect(ReceiptReader.read("本日の損益\n+5,400", now: now, calendar: jst).isPlus == true)
+        #expect(ReceiptReader.read("本日の損益\n+5,400", now: now, calendar: jst).amount == 5400)
+        #expect(ReceiptReader.read("－２，０００円", now: now, calendar: jst) == ReceiptDraft(amount: 2000, isPlus: false))
+    }
+
+    @Test func saysNothingWhenThereIsNothing() {
+        let draft = ReceiptReader.read("こんにちは", now: now, calendar: jst)
+        #expect(draft.isEmpty)
+        // An unknown direction stays unknown.
+        #expect(ReceiptReader.read("1,500円", now: now, calendar: jst) == ReceiptDraft(amount: 1500, isPlus: nil))
+    }
+}
+
+@Suite struct BudgetAlertTests {
+    @Test func sendsEachLevelOnce() {
+        let near = BudgetUsage(limit: 10000, spent: 8000)
+        let over = BudgetUsage(limit: 10000, spent: 12000)
+        #expect(BudgetAlert.toSend(BudgetUsage(limit: 10000, spent: 7999), alreadySent: nil) == nil)
+        #expect(BudgetAlert.toSend(near, alreadySent: nil) == .near)
+        #expect(BudgetAlert.toSend(near, alreadySent: .near) == nil)
+        #expect(BudgetAlert.toSend(over, alreadySent: .near) == .over)
+        #expect(BudgetAlert.toSend(over, alreadySent: .over) == nil)
+        #expect(BudgetAlert.toSend(near, alreadySent: .over) == nil)
+        #expect(BudgetAlert.toSend(BudgetUsage(limit: 0, spent: 5000), alreadySent: nil) == nil)
+    }
+}

@@ -43,6 +43,7 @@ targets:
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
+        UIBackgroundModes: [remote-notification]
         PetacalTeamPrefix: $(AppIdentifierPrefix)
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
@@ -58,7 +59,11 @@ targets:
       properties:
         # 「ペタカレに送る」との受け渡し（キーチェーンの共有。Apple のサイトでの登録は要らない）
         keychain-access-groups: [$(AppIdentifierPrefix)com.seventhwell.petacal.shared]
-        # iCloud は容器を Apple Developer で登録してから足す（cloudkit/README.md）
+        # 記録を iCloud（CloudKit の個人用の領域）で、設定をキーと値の iCloud でそろえる（cloudkit/README.md）
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.seventhwell.petacal]
+        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+        aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seventhwell.petacal

@@ -86,9 +86,11 @@ struct SettingsScreen: View {
                 Text("ロックをオンにすると、記録・金額・集計は Face ID／Touch ID／パスコードで解除するまで隠れます。予定はそのまま見られます。アプリを閉じると、もう一度ロックされます。予算を入れると、集計に使った割合が出て、8割を超えたら知らせます（0 で予算なし）。通知の文には金額を入れません。")
             }
             Section {
+                LabeledContent("iCloud", value: FileManager.default.ubiquityIdentityToken == nil
+                               ? String(localized: "サインインしていません") : String(localized: "使っています"))
                 LabeledContent("バージョン", value: version)
             } footer: {
-                Text("記録は今はこの端末の中だけに保存されます。iCloud でほかの端末とそろえる機能は準備中です。")
+                Text("記録・写真と、月の表示・予算・記録の種類の色は、同じ Apple アカウントの iCloud でほかの端末とそろいます。iCloud にサインインしていないときは、この端末の中だけに保存されます。表示するカレンダーとカレンダーの色は、端末ごとに選びます。")
             }
         }
         .navigationTitle("設定")

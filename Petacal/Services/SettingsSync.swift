@@ -5,7 +5,7 @@ import Foundation
 final class SettingsSync {
     static let keys = ["calendar.pattern", "budget.oshi", "colors.kind"]
     /// Off until the iCloud capability is in the app (the container needs registering on Apple's site first).
-    static let isEnabled = false
+    static let isEnabled = true
 
     private let cloud = NSUbiquitousKeyValueStore.default
     private let defaults: UserDefaults

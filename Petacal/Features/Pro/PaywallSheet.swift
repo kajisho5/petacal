@@ -184,17 +184,21 @@ struct PaywallSheet: View {
 
 /// プライバシーポリシー (in the app until a public page exists).
 struct PrivacyPolicyScreen: View {
+    /// The same text, published on the web (store/privacy.html in this repository).
+    static let webURL = URL(string: "https://seventh-well.com/petacal/privacy/")!
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("ペタカレ（仮称）は、あなたの予定・記録・写真を開発者のサーバーに送りません。")
+                Text("ペタカレは、あなたの予定・記録・写真を開発者のサーバーに送りません。広告や利用状況の分析も入っていません。")
                 section("予定", "端末に登録してあるカレンダーを、許可をもらったうえで読み書きします。予定の内容はこの端末の中だけで扱います。")
-                section("記録と写真", "記録・金額・メモ・写真はこの端末に保存します。iCloud でそろえる設定にした場合は、あなた自身の iCloud に保存され、開発者は見られません。")
+                section("記録と写真", "記録・金額・メモ・写真はこの端末に保存します。")
                 section("文字の読み取りと AI", "写真や文章の読み取り、AI による題名や場所の読み取りは、すべてこの端末の中で行います。")
-                section("購入", "購入の手続きは Apple が行います。開発者が受け取るのは、購入したかどうかの情報だけです。")
+                section("購入", "購入の手続きは Apple が行います。開発者が知ることができるのは、あなたを特定しない売上の集計だけです。")
                 section("通知", "予算のお知らせはこの端末の中でつくります。文に金額は入れません。")
-                section("お問い合わせ", "SEVENTHWELL（連絡先は公開前に載せます）")
-                Text("この文は公開前に見直します（2026年11月 時点の案）。").font(.footnote).foregroundStyle(.secondary)
+                section("お問い合わせ", "SEVENTHWELL　info@seventh-well.com")
+                Link("ウェブで全文を見る", destination: PrivacyPolicyScreen.webURL)
+                Text("2026年11月12日 制定").font(.footnote).foregroundStyle(.secondary)
             }
             .padding(24)
             .frame(maxWidth: 640, alignment: .leading)

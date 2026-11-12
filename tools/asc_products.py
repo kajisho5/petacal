@@ -67,6 +67,12 @@ def call(method, path, body=None, query=None, quiet=False):
         return e.code, {}
 
 
+def has(path, query=None):
+    """True when the link points at something (App Store Connect answers 200 with data null when it does not)."""
+    status, body = call("GET", path, query=query, quiet=True)
+    return status == 200 and bool(body.get("data"))
+
+
 def get_all(path, query=None):
     items, url, q = [], path, dict(query or {}, limit=200)
     while url:
@@ -157,8 +163,7 @@ def ensure_subscriptions(app_id):
                 "attributes": {"name": spec["title"], "locale": "ja", "description": spec["description"]},
                 "relationships": {"subscription": rel("subscriptions", sid)}}})
             print("  日本語の名前と説明を付けた")
-        status, _ = call("GET", f"/v1/subscriptions/{sid}/subscriptionAvailability", quiet=True)
-        if status != 200:
+        if not has(f"/v1/subscriptions/{sid}/subscriptionAvailability"):
             call("POST", "/v1/subscriptionAvailabilities", {"data": {
                 "type": "subscriptionAvailabilities", "attributes": {"availableInNewTerritories": False},
                 "relationships": {"subscription": rel("subscriptions", sid),
@@ -180,8 +185,7 @@ def ensure_subscriptions(app_id):
                 "relationships": {"subscription": rel("subscriptions", sid),
                                   "territory": rel("territories", TERRITORY)}}})
             print("  最初の1週間無料")
-        status, _ = call("GET", f"/v1/subscriptions/{sid}/appStoreReviewScreenshot", quiet=True)
-        if status != 200:
+        if not has(f"/v1/subscriptions/{sid}/appStoreReviewScreenshot"):
             upload_screenshot("/v1/subscriptionAppStoreReviewScreenshots", "subscriptionAppStoreReviewScreenshots",
                               "subscription", "subscriptions", sid)
 
@@ -208,15 +212,14 @@ def ensure_lifetime(app_id):
             "attributes": {"name": LIFETIME["title"], "locale": "ja", "description": LIFETIME["description"]},
             "relationships": {"inAppPurchaseV2": rel("inAppPurchases", iid)}}})
         print("  日本語の名前と説明を付けた")
-    status, _ = call("GET", f"/v2/inAppPurchases/{iid}/inAppPurchaseAvailability", quiet=True)
-    if status != 200:
+    if not has(f"/v2/inAppPurchases/{iid}/inAppPurchaseAvailability"):
         call("POST", "/v1/inAppPurchaseAvailabilities", {"data": {
             "type": "inAppPurchaseAvailabilities", "attributes": {"availableInNewTerritories": False},
             "relationships": {"inAppPurchase": rel("inAppPurchases", iid),
                               "availableTerritories": {"data": [{"type": "territories", "id": TERRITORY}]}}}})
         print("  販売する国：日本")
-    status, _ = call("GET", f"/v2/inAppPurchases/{iid}/iapPriceSchedule", quiet=True)
-    if status != 200:
+    status, schedule = call("GET", f"/v2/inAppPurchases/{iid}/iapPriceSchedule", query={"include": "manualPrices"}, quiet=True)
+    if not (status == 200 and schedule.get("included")):
         point = find_price_point(f"/v2/inAppPurchases/{iid}/pricePoints", LIFETIME["price"])
         if point:
             call("POST", "/v1/inAppPurchasePriceSchedules", {
@@ -228,8 +231,7 @@ def ensure_lifetime(app_id):
                               "relationships": {"inAppPurchaseV2": rel("inAppPurchases", iid),
                                                 "inAppPurchasePricePoint": rel("inAppPurchasePricePoints", point)}}]})
             print(f"  価格 {LIFETIME['price']} 円")
-    status, _ = call("GET", f"/v2/inAppPurchases/{iid}/appStoreReviewScreenshot", quiet=True)
-    if status != 200:
+    if not has(f"/v2/inAppPurchases/{iid}/appStoreReviewScreenshot"):
         upload_screenshot("/v1/inAppPurchaseAppStoreReviewScreenshots", "inAppPurchaseAppStoreReviewScreenshots",
                           "inAppPurchaseV2", "inAppPurchases", iid)
 

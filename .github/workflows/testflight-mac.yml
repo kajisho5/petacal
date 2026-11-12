@@ -1,0 +1,21 @@
+# Mac 版を TestFlight に送る（kajisho5/runway の macos 枝。動作を確かめたら main に入れる）
+name: testflight-mac
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    uses: kajisho5/runway/.github/workflows/apple-testflight.yml@macos
+    with:
+      bundle_id: com.seventhwell.petacal
+      project: Petacal.xcodeproj
+      scheme: PetacalMac
+      platform: macos
+      pre_build: brew install xcodegen && xcodegen generate
+      xcode: "27.1"
+      runner: xcode-27
+    secrets: inherit

@@ -418,6 +418,8 @@ private struct MonthTotalsLine: View {
     let month: MonthRef
     let calendar: Calendar
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
         let inMonth = records.filter {
             let day = DayKey(date: $0.day, calendar: calendar)
@@ -425,7 +427,9 @@ private struct MonthTotalsLine: View {
         }
         let stats = StatsCalculator.monthStats(inMonth.map { RecordAmount(kind: $0.kind, category: $0.category, amount: $0.amount) })
         if stats.plusCount + stats.minusCount + stats.oshiCount > 0 {
-            HStack(spacing: 12) {
+            let layout = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2)) : AnyLayout(HStackLayout(spacing: 12))
+            layout {
                 if stats.plusCount + stats.minusCount > 0 {
                     Text(verbatim: String(localized: "収支") + " " + Yen.signed(stats.balanceTotal))
                         .foregroundStyle(Color.amount(stats.balanceTotal))
@@ -434,8 +438,8 @@ private struct MonthTotalsLine: View {
                     Text(verbatim: String(localized: "推し活・趣味") + " " + Yen.plain(stats.oshiSpent))
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .font(.footnote.weight(.semibold))
             .monospacedDigit()
             .padding(.horizontal)

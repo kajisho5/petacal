@@ -298,7 +298,15 @@ def purchases(app):
             say(f"    グループの表示名 {loc['attributes'].get('locale')}: {loc['attributes'].get('state')}")
         if gv:
             for loc in asc.get_all(f"/v1/subscriptionGroupVersions/{gv['id']}/localizations"):
-                say(f"    グループ（審査用のバージョン）の表示名 {loc['attributes'].get('locale')}: {loc['attributes'].get('state')}")
+                la = loc["attributes"]
+                say(f"    グループ（審査用のバージョン）の表示名 {la.get('locale')}: 名前 {la.get('name')!r} アプリ名 {la.get('customAppName')!r}")
+                want = {"name": "ペタカレ Pro", "customAppName": "ペタカレ"}
+                if any(la.get(k) != v for k, v in want.items()):
+                    say("      表示名とアプリ名を入れる")
+                    if WRITE:
+                        status, _ = asc.call("PATCH", f"/v2/subscriptionGroupLocalizations/{loc['id']}", {"data": {
+                            "type": "subscriptionGroupLocalizations", "id": loc["id"], "attributes": want}})
+                        say(f"      -> HTTP {status}")
         for s in asc.get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions"):
             say(f"  {s['attributes'].get('productId')}: {s['attributes'].get('state')}")
             if s["attributes"].get("state") == "MISSING_METADATA":

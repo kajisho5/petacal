@@ -192,7 +192,9 @@ petacal/
 | 端末 | Mac 版の実機での確認、Mac の App Store 用の画像 | Mac 版はバージョン 0.11.0（ビルド 3）まで TestFlight に届いた（`.github/workflows/testflight-mac.yml`）。本人は Mac を持っていないので、Mac での動作は自動チェックの画面の画像でしか確かめていない。その画像では横のメニューの選んだ行が黒い帯になる（撮り方の限界と推測）ため、Mac の App Store 用の画像はまだ使えない |
 | 端末 | iPhone Duo の内側（開いた状態・半分折った状態）の画像 | 外部の小さな道具（duo-hinge）を自動チェックで使う操作が、作業環境の安全確認で止められた。本人の判断（2026-11-12）で、自動チェックでは閉じた状態（外側）だけを撮り、開いた・半分折った状態は TestFlight の実機で確かめる。App Store の内側の画像（2007×2853）も、実機の画面の写しで用意する |
 | お金 | 商品の審査の結果 | 2026-11-14 にバージョン 1.0 と一緒に審査へ提出（年額・月額・買い切り）。年額・月額は、Apple の求めで日本以外の 174 の国・地域にも日本と同じ水準の価格を入れた（売るのは日本だけ） |
-| 連携 | アカウントを直接つなぐ（Google ほか）、Google の予定ごとの色 | 各社の登録と審査が要る |
+| 連携 | Google カレンダーの直接の連携を実際に動かす | 作るのは済んだ（枝 `google-sync`、バージョン 1.1 に入れる。C. を参照）。Google のサイトでの準備（iOS 用のクライアント ID）が済むまで、設定の「Google アカウントを追加」は「準備中」と出る。一般公開には Google の確認（動画つき）が要り、それまでは登録したテスト用のアカウントだけが使える |
+| 連携 | Exchange／Outlook など Google 以外のアカウントを直接つなぐ | 範囲外にした（C. の 1.）。今は設定アプリにアカウントを追加すれば表示される |
+| 連携 | 予定のくり返し・通知の設定（Google の予定） | Google の予定の編集画面（アプリの独自の画面）では、題名・日時・場所・メモ・削除だけ。くり返しの予定は1日分だけ変わる |
 | 仕上げ | 審査の結果待ち、Mac 版の提出、名前の決定（仮称「ペタカレ」のまま提出） | 2026-11-14 に iPhone／iPad のバージョン 1.0（ビルド 18）を審査へ提出（`.github/workflows/store-release.yml`）。公開は手動：審査に通っても、本人が App Store Connect で公開を押すまで出ない。配信は日本だけ、アプリは無料。App のプライバシー（データを集めない）は本人が入力。Mac 版は App Store 用の画像が使えない（黒い帯）ため未提出 |
 
 2026-11-12 に入れたもの：App Store 用のスクリーンショットを、受け付けられる寸法で自動で撮る（iPhone 2種・iPad 13インチ・iPhone Duo の外側・Mac。`tools/store_screenshots.py`）／アプリのアイコンを作り直した（カレンダーに記録の紙をテープでペタッと貼った形。文字なし。確認用の画像は `design/overview/app-icon-preview.png`。ガラスの効果やティントの見え方は実機でしか確かめられない）／App Store の掲載文の案と文字数の確認（`tools/check_metadata.py`）／プライバシーポリシーとサポートのページの案。
@@ -570,3 +572,78 @@ S-09〜S-14 の iPad・Mac・iPhone Duo 内側での見え方：どれもシー�
 - Foundation Models の日本語での読み取りの良し悪し、iPhone Duo の実際の折り目の幅（どちらも実機で未確認）。Apple の資料は API の説明ページだけを読み、iPhone Duo の解説動画（Tech Talks）は見ていない
 - Mac の SDK に `reservedRegions` が無かった（Xcode 27.1 でビルドエラー）。Apple のページには macOS 27.1 以降とあるので、ランナーの Mac 用 SDK が古い可能性がある【推測】。Mac には折り目が無いので iPhone だけで使う形にした
 - EventKit の予定（EKEvent／EKCalendarItem）の全項目。予定1件ごとの色の項目が無いことは、一覧の一部を見ただけで、全部は確認していない
+
+---
+
+## C. Google カレンダーとの直接の連携（設計・2026-11-14・本人確認済み・実装済み）
+
+### 1. 目的と範囲
+
+- Google アカウントをアプリから直接つなぎ、Google カレンダーの予定を表示・追加・変更・削除する。**予定ごとの Google の色**（colorId）もそのまま出す（設定アプリ経由の今の方法では出せない）。
+- 対象：iPhone／iPad／Mac（同じコード）。バージョン 1.1 で入れる（1.0 は審査中のため触らない）。
+- 範囲外：Exchange／Outlook／Microsoft 365 の直接の連携（あとで同じ形で足す）、Google 以外の色の取り込み。
+
+### 2. 技術の選び方
+
+| 案 | 動作の軽さ | 配布サイズ | 作りやすさ | 対応OS | 将来性 | AI での書きやすさ |
+|---|---|---|---|---|---|---|
+| **A. 自前の OAuth（PKCE）＋ Google Calendar API（REST）** | ◎ 標準の部品だけ | ◎ 増えない | ○ ログインと通信を自分で書く | iOS／iPadOS／macOS（ASWebAuthenticationSession） | ◎ Google の公開の仕様 | ◎ |
+| B. Google Sign-In の SDK | ○ | △ 増える | ◎ | iOS／macOS | ○ | ○ |
+| C. 今のまま（設定アプリにアカウントを追加） | ◎ | ◎ | ◎ 作業なし | 全部 | ○ | ― |
+
+**おすすめ：A**。理由：外部ライブラリを入れない決まり（CLAUDE.md）に合い、予定ごとの色が出せる。B は外部ライブラリになる。C は色が出ない。
+- 根拠：iPhone アプリ用の Google の OAuth クライアントには秘密の鍵が無く、リダイレクトは Client ID を逆にした独自 URL スキーム（例 `com.googleusercontent.apps.<ID>:/oauth2redirect`）を使う（Google 公式「OAuth 2.0 for Mobile & Desktop Apps」https://developers.google.com/identity/protocols/oauth2/native-app 、AppAuth の Google 向けの説明）。
+- 権限（スコープ）：`https://www.googleapis.com/auth/calendar.events`（予定の読み書き）と `https://www.googleapis.com/auth/calendar.calendarlist.readonly`（カレンダーの一覧と色の読み取り。色の定義 `GET /colors` もこのスコープで読める：https://developers.google.com/calendar/api/v3/reference/colors/get ）。どちらも Google の分類で「センシティブ」で、一般公開には Google の確認（動画つき）が要る（https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification ）。
+- 確認が済むまでは「テスト」の状態で、登録したテスト用のアカウント（本人）だけが使える。
+
+### 3. 画面
+
+| ID | 名前 | 目的 | 主な要素 | 入り口 |
+|---|---|---|---|---|
+| S-16 | カレンダーのアカウント | どのカレンダーを使うかを選ぶ | 「この iPhone」（今の EventKit のカレンダー）、「Google」（つないだアカウント、カレンダーの数）、「Google アカウントを追加」 | 設定 |
+| S-17 | Google につなぐ前の説明 | 何を見て何を変えるか、どこに送るかを先に伝える | 記号、見るもの／変えるもの／送り先／やめるとき、「続ける」（ボタンは1つ） | S-16 の「Google アカウントを追加」 |
+| （標準） | Google のログインと許可 | ― | システムの ASWebAuthenticationSession の画面（モックは描かない） | S-17 の「続ける」 |
+| S-18 | Google アカウント | 表示するカレンダー、色、解除 | カレンダーごとのスイッチ（Google の色の丸）、「予定ごとの Google の色を使う」、最後に読み込んだ時刻、「接続を解除」（赤。確認のアラート：キャンセル／解除） | S-16 のアカウントの行 |
+
+モック：`design/mocks/iphone-S-16-*.svg`（通常・Google なし・ログインし直し）、`iphone-S-17-*.svg`、`iphone-S-18-*.svg`（通常・解除の確認）。ライトとダーク。確認用の一覧 `design/overview/google-overview.png`。iPad と Mac は同じ一覧の画面（Mac は設定のウインドウの中）。
+
+### 4. 動き
+
+- 予定の一覧・月の帯・週・日では、EventKit の予定と Google の予定を同じように並べる。Google の予定の色は、「予定ごとの色」がオンなら予定の colorId、オフならカレンダーの色。ユーザーが ColorStore で選んだ色があればそれを優先する（今と同じ）。
+- 新しい予定・編集・削除：保存先のカレンダーが Google なら API で書く。終日・時刻・場所・メモ・色を扱う。
+- 同じ Google アカウントが設定アプリにもあるとき：その EventKit のカレンダー（アカウント名がメールアドレスと同じもの）を隠して、二重に出さない。
+- 読み込み：今日の1年前から1年後まで（検索と同じ範囲）。アプリを開いたとき・前面に戻ったとき（1分以内に読んだばかりなら省く）、S-18 で引っぱって更新したとき。くり返しの予定は1回ずつに分けて受け取る（`singleEvents=true`）。
+  - **設計から変えた点**：差分だけを取る syncToken は使わない。Google の仕様で syncToken は期間の指定（timeMin／timeMax）と一緒に使えず（https://developers.google.com/calendar/api/v3/reference/events/list ）、期間なしで全部を読むと古い予定やくり返しが多い人で重くなるため、期間を決めて毎回読み直す形にした。
+  - 電波が無いときは最後に読み込んだ予定を出し、S-16 の行に「最後に読み込んだ予定を表示しています」。
+- ログインの情報（リフレッシュトークン）はキーチェーンにだけ保存。開発者のサーバーは使わない。期限切れ・取り消し（invalid_grant）のときは S-16 の行を「ログインし直してください」にする。
+- 接続を解除：トークンを Google で取り消し、キーチェーンと保存した予定を消す。Google 側の予定は消えない。
+- 状態の保存：表示するカレンダーの選択と色の設定は端末に保存。
+
+### 5. 状態と文言
+
+| 画面 | 空 | 読み込み中 | エラー |
+|---|---|---|---|
+| S-16 | Google なし：「Google アカウントを追加」だけ（モックあり） | 行の右に小さな進行表示 | ログインし直し（モックあり） |
+| S-18 | カレンダーが0件：「表示できるカレンダーがありません」 | 一覧の位置に進行表示 | 読み込めない：「Google から読み込めませんでした。通信の状態を確かめて、もう一度試してください」＋「もう一度」 |
+
+### 6. プライバシーと審査
+
+- プライバシーポリシー（https://seventh-well.com/petacal/privacy/ ）に「Google のデータ」の節を足す：読むもの、使い道（このアプリの画面に出すだけ）、保存場所（端末）、第三者に渡さない、Google API Services User Data Policy（Limited Use を含む）に従うこと。
+- App Store の「App のプライバシー」：データは開発者に送らないので「データを収集しない」のままでよい、と推測（提出の前にもう一度確かめる）。
+- Google の確認の申請に要るもの：アプリのホームページ（https://seventh-well.com/petacal/ ）、プライバシーポリシー、ドメインの所有の確認（seventh-well.com）、許可から予定の表示までを見せる動画。
+
+### 6.5 実装（2026-11-14）
+
+- 計算と読み取り（Linux でもテストできる）：`Packages/PetaCore/Sources/PetaCore/GoogleCalendar.swift`（ログイン用の URL、PKCE、返事の読み取り、カレンダー一覧・予定・色の読み取り、予定の書き出し、二重表示を隠す計算）。テスト：`GoogleCalendarTests.swift`。
+- 通信とキーチェーン：`Petacal/Model/GoogleStore.swift`。予定は `CalendarStore` で端末の予定と混ぜる（ID は `google:<メール>|<カレンダー>|<予定>`）。
+- 画面：S-16〜S-18 は `Petacal/Features/Settings/CalendarAccountsScreen.swift`、Google の予定の追加・編集・削除は `Petacal/Features/Calendar/GoogleEventEditor.swift`（システムの編集画面は EventKit の予定しか扱えないため、独自の画面）。
+- クライアント ID は `project.yml` の `GOOGLE_CLIENT_ID`（Info.plist の `GoogleClientID`）。空のあいだは「準備中」。
+- 端末のカレンダーへのアクセスを許可していなくても、Google をつないでいれば予定の表示と追加ができる。
+
+### 7. 本人の作業（Google のサイト。設計の確認のあと、URL と押す場所を渡す）
+
+1. Google Cloud のプロジェクトを作る
+2. Google Calendar API を有効にする
+3. OAuth の同意画面（アプリ名・サポートのメール・ホームページ・プライバシーポリシー・スコープ・テストユーザー）
+4. iOS 用の OAuth クライアントを作る（Bundle ID `com.seventhwell.petacal`）→ Client ID をこちらに伝える（秘密の値ではない）
+5. （一般公開の前）Google の確認の申請

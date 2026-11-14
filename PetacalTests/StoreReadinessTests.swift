@@ -1,4 +1,5 @@
 import Foundation
+import PetaCore
 import Testing
 
 /// What App Store Connect and App Review look at in the app itself.
@@ -13,9 +14,15 @@ struct StoreReadinessTests {
     }
 
     /// The version is the one App Store Connect has (1.0) and encryption is declared as not used.
+    @Test func googleClientIDIsUsable() throws {
+        let raw = try #require(Bundle.main.object(forInfoDictionaryKey: "GoogleClientID") as? String)
+        let config = try #require(GoogleOAuthConfig(clientID: raw))
+        #expect(config.redirectScheme.hasPrefix("com.googleusercontent.apps."))
+    }
+
     @Test func versionAndEncryption() {
         let info = Bundle.main.infoDictionary ?? [:]
-        #expect(info["CFBundleShortVersionString"] as? String == "1.0")
+        #expect(info["CFBundleShortVersionString"] as? String == "1.1")
         #expect(info["ITSAppUsesNonExemptEncryption"] as? Bool == false)
     }
 }

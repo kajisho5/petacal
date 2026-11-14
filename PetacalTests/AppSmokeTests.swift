@@ -32,7 +32,7 @@ import Testing
         #expect(ColorStore(defaults: defaults).calendarChoices == ["c1": 25])
     }
 
-    @Test func sampleStoreOffersCalendarsAndSkipsSaving() throws {
+    @Test func sampleStoreOffersCalendarsAndSkipsSaving() async throws {
         let item = EventItem(id: "e3|0", eventIdentifier: "e3", title: "打ち合わせ",
                              start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 3600),
                              isAllDay: false, calendarID: "c1", calendarTitle: "仕事",
@@ -41,7 +41,21 @@ import Testing
         #expect(store.writableCalendars.map(\.title) == ["仕事"])
         #expect(store.defaultCalendarID == "c1")
         let draft = QuickDraft(title: "新しい予定", start: Date(), end: Date(), isAllDay: true, calendarID: "c1")
-        #expect(try store.add(draft) == nil)   // sample stores never write to the device
+        let saved = try await store.add(draft)
+        #expect(saved == nil)   // sample stores never write to the device
+        #expect(store.google == nil)
+    }
+
+    @Test func quickDraftsBecomeGoogleDraftsWithAnExclusiveEnd() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 9 * 3600)!
+        let day = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20))!
+        let last = calendar.date(byAdding: .day, value: 2, to: day)!
+        let draft = QuickDraft(title: "合宿", start: day, end: last, isAllDay: true, calendarID: "google:a@example.com|c")
+        let google = GoogleEventDraft(draft, calendar: calendar)
+        #expect(google.end == calendar.date(byAdding: .day, value: 3, to: day))
+        let timed = QuickDraft(title: "打ち合わせ", start: day, end: day.addingTimeInterval(3600), isAllDay: false, calendarID: nil)
+        #expect(GoogleEventDraft(timed, calendar: calendar).end == day.addingTimeInterval(3600))
     }
 
     @Test func hidingACalendarHidesItsEvents() {

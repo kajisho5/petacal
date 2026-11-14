@@ -17,8 +17,9 @@ final class EntitlementStore {
     private(set) var products: [String: Product] = [:]
     private(set) var owned: Set<String> = []
     private(set) var didLoad = false
-    /// TestFlight or a debug build where the products cannot be found yet: everything stays open,
-    /// so testing does not stop. Never on the App Store.
+    /// A debug build where the products cannot be found: everything stays open, so testing does not stop.
+    /// Never in a build sent to TestFlight or the App Store (App Review uses the same test purchases as
+    /// TestFlight, so it must see the real Pro screen).
     private(set) var testUnlock = false
     /// Why the Pro screen is showing (nil: not showing).
     var paywallReason: String?
@@ -97,8 +98,7 @@ final class EntitlementStore {
         #if DEBUG
         return true
         #else
-        guard let result = try? await AppTransaction.shared, case .verified(let app) = result else { return false }
-        return app.environment != .production
+        return false
         #endif
     }
 }

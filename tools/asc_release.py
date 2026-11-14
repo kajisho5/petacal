@@ -369,8 +369,10 @@ def submit(app, v, items):
     for rel_name, kind, id_ in [("appStoreVersion", "appStoreVersions", v["id"])] + items:
         status, _ = asc.call("POST", "/v1/reviewSubmissionItems", {"data": {
             "type": "reviewSubmissionItems", "relationships": {
-                "reviewSubmission": asc.rel("reviewSubmissions", main["id"]), rel_name: asc.rel(kind, id_)}}}, quiet=True)
-        say(f"  項目 {rel_name}: HTTP {status}" + ("（もう入っている）" if status == 409 else ""))
+                "reviewSubmission": asc.rel("reviewSubmissions", main["id"]), rel_name: asc.rel(kind, id_)}}})
+        say(f"  項目 {rel_name}: HTTP {status}")
+    # A refused item (already in this submission, or not ready) is shown above; it does not stop the submission.
+    asc.problems[:] = [p for p in asc.problems if "reviewSubmissionItems" not in p]
     say(f"  中身 {[h for _, h in contents(main['id'])]}")
     if asc.problems:
         say("  問題があるので提出しない")

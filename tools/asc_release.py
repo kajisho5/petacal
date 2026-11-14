@@ -328,34 +328,55 @@ def purchases(app):
     return items
 
 
+ITEM_KINDS = "appStoreVersion,subscriptionVersion,subscriptionGroupVersion,inAppPurchaseVersion"
+
+
+def contents(sub_id):
+    """[(item id, what it holds)] of a review submission."""
+    out = []
+    for it in asc.get_all(f"/v1/reviewSubmissions/{sub_id}/items", {"include": ITEM_KINDS}):
+        held = [k for k, val in (it.get("relationships") or {}).items() if isinstance(val, dict) and val.get("data")]
+        out.append((it["id"], held))
+    return out
+
+
 def submit(app, v, items):
     say("■ 審査への提出")
-    open_ones = asc.get_all(f"/v1/apps/{app['id']}/reviewSubmissions", {"filter[platform]": "IOS"})
-    for s in open_ones:
-        say(f"  これまでの提出 {s['id']}: {s['attributes'].get('state')}")
-    if any(s["attributes"].get("state") in ("WAITING_FOR_REVIEW", "IN_REVIEW") for s in open_ones):
+    subs = asc.get_all(f"/v1/apps/{app['id']}/reviewSubmissions")
+    for s in subs:
+        say(f"  これまでの提出 {s['id']}: {s['attributes'].get('state')} {s['attributes'].get('platform')}"
+            f" {[h for _, h in contents(s['id'])] if s['attributes'].get('state') in ('READY_FOR_REVIEW', 'UNRESOLVED_ISSUES') else ''}")
+    if any(s["attributes"].get("state") in ("WAITING_FOR_REVIEW", "IN_REVIEW") for s in subs):
         say("  すでに審査待ち・審査中なので、何もしない")
         return
-    draft = next((s for s in open_ones if s["attributes"].get("state") in ("READY_FOR_REVIEW", "UNRESOLVED_ISSUES")), None)
-    if not draft:
+    drafts = [s for s in subs if s["attributes"].get("state") in ("READY_FOR_REVIEW", "UNRESOLVED_ISSUES")]
+    # Keep the draft that already holds the app version; empty the others so nothing is held twice.
+    main = next((d for d in drafts if any("appStoreVersion" in h for _, h in contents(d["id"]))), drafts[0] if drafts else None)
+    for d in drafts:
+        if main and d["id"] == main["id"]:
+            continue
+        for item_id, held in contents(d["id"]):
+            status, _ = asc.call("DELETE", f"/v1/reviewSubmissionItems/{item_id}")
+            say(f"  別の下書き {d['id']} から {held} を外す: HTTP {status}")
+    if not main:
         status, made = asc.call("POST", "/v1/reviewSubmissions", {"data": {
             "type": "reviewSubmissions", "attributes": {"platform": "IOS"},
             "relationships": {"app": asc.rel("apps", app["id"])}}})
         if status not in (200, 201):
             return
-        draft = made["data"]
-    have = asc.get_all(f"/v1/reviewSubmissions/{draft['id']}/items")
-    say(f"  下書き {draft['id']}（入っている項目 {len(have)}）")
+        main = made["data"]
+    say(f"  まとめる下書き {main['id']}")
     for rel_name, kind, id_ in [("appStoreVersion", "appStoreVersions", v["id"])] + items:
         status, _ = asc.call("POST", "/v1/reviewSubmissionItems", {"data": {
             "type": "reviewSubmissionItems", "relationships": {
-                "reviewSubmission": asc.rel("reviewSubmissions", draft["id"]), rel_name: asc.rel(kind, id_)}}}, quiet=True)
+                "reviewSubmission": asc.rel("reviewSubmissions", main["id"]), rel_name: asc.rel(kind, id_)}}}, quiet=True)
         say(f"  項目 {rel_name}: HTTP {status}" + ("（もう入っている）" if status == 409 else ""))
+    say(f"  中身 {[h for _, h in contents(main['id'])]}")
     if asc.problems:
         say("  問題があるので提出しない")
         return
-    status, done = asc.call("PATCH", f"/v1/reviewSubmissions/{draft['id']}", {"data": {
-        "type": "reviewSubmissions", "id": draft["id"], "attributes": {"submitted": True}}})
+    status, done = asc.call("PATCH", f"/v1/reviewSubmissions/{main['id']}", {"data": {
+        "type": "reviewSubmissions", "id": main["id"], "attributes": {"submitted": True}}})
     say(f"  提出: HTTP {status} 状態 {(done.get('data') or {}).get('attributes', {}).get('state')}")
 
 

@@ -255,6 +255,25 @@ def reviewable_version(list_path, create_kind, rel_name, parent_kind, parent_id,
     return made.get("data") if status in (200, 201) else None
 
 
+def diagnose(s):
+    """What a subscription has, to see why App Store Connect says metadata is missing."""
+    a, sid = s["attributes"], s["id"]
+    say(f"    期間 {a.get('subscriptionPeriod')} 段階 {a.get('groupLevel')} 家族共有 {a.get('familySharable')} "
+        f"組織向け {a.get('multiSeatStatus')} 市場の設定 {len(a.get('marketSettings') or [])} 件 審査メモ {'あり' if a.get('reviewNote') else 'なし'}")
+    say(f"    価格 {len(asc.get_all(f'/v1/subscriptions/{sid}/prices'))} 件")
+    status, av = asc.call("GET", f"/v1/subscriptions/{sid}/subscriptionAvailability", {"include": "availableTerritories"}, quiet=True)
+    terr = [t["id"] for t in (av.get("data") or {}).get("relationships", {}).get("availableTerritories", {}).get("data", [])] if status == 200 else []
+    say(f"    販売する国 HTTP {status} {terr[:5]}")
+    status, shot = asc.call("GET", f"/v1/subscriptions/{sid}/appStoreReviewScreenshot", quiet=True)
+    st = ((shot.get("data") or {}).get("attributes") or {}).get("assetDeliveryState") if status == 200 else None
+    say(f"    審査用の画像 HTTP {status} {st}")
+    locs = [(x["attributes"].get("locale"), x["attributes"].get("state")) for x in asc.get_all(f"/v1/subscriptions/{sid}/subscriptionLocalizations")]
+    say(f"    説明（以前の形） {locs}")
+    offers = asc.get_all(f"/v1/subscriptions/{sid}/introductoryOffers")
+    plans = asc.get_all(f"/v1/subscriptions/{sid}/planAvailabilities")
+    say(f"    お試し {len(offers)} 件 プラン {len(plans)} 件")
+
+
 def purchases(app):
     say("■ App 内課金（最初の商品は、アプリのバージョンと一緒に審査に出す）")
     items = []
@@ -263,8 +282,15 @@ def purchases(app):
                                 "subscriptionGroup", "subscriptionGroups", g["id"], f"グループ {g['attributes'].get('referenceName')}")
         if gv:
             items.append(("subscriptionGroupVersion", "subscriptionGroupVersions", gv["id"]))
+        for loc in asc.get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptionGroupLocalizations"):
+            say(f"    グループの表示名 {loc['attributes'].get('locale')}: {loc['attributes'].get('state')}")
+        if gv:
+            for loc in asc.get_all(f"/v1/subscriptionGroupVersions/{gv['id']}/localizations"):
+                say(f"    グループ（審査用のバージョン）の表示名 {loc['attributes'].get('locale')}: {loc['attributes'].get('state')}")
         for s in asc.get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions"):
             say(f"  {s['attributes'].get('productId')}: {s['attributes'].get('state')}")
+            if s["attributes"].get("state") == "MISSING_METADATA":
+                diagnose(s)
             sv = reviewable_version(f"/v1/subscriptions/{s['id']}/versions", "subscriptionVersions", "subscription",
                                     "subscriptions", s["id"], s["attributes"].get("name") or s["id"])
             if sv:

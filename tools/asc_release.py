@@ -92,8 +92,9 @@ def app_level(app, info):
               current=body["data"].get("attributes") or {})
     # Price: free, Japan as the base.
     status, body = asc.call("GET", f"/v1/apps/{app['id']}/appPriceSchedule", quiet=True)
-    if status == 200 and body.get("data"):
-        say("  価格: 設定済み")
+    manual = asc.get_all(f"/v1/appPriceSchedules/{body['data']['id']}/manualPrices") if status == 200 and body.get("data") else []
+    if manual:
+        say(f"  価格: 設定済み（{len(manual)} 件）")
     else:
         say("  価格: 無料にする")
         free = next((p["id"] for p in asc.get_all(f"/v1/apps/{app['id']}/appPricePoints", {"filter[territory]": TERRITORY})
@@ -258,6 +259,35 @@ def reviewable_version(list_path, create_kind, rel_name, parent_kind, parent_id,
     return made.get("data") if status in (200, 201) else None
 
 
+def price_everywhere(s):
+    """Apple wants an UPFRONT price in every territory: the Japanese price equalized by Apple's own table."""
+    sid, name = s["id"], s["attributes"].get("productId")
+    prices = asc.get_all(f"/v1/subscriptions/{sid}/prices", {"include": "territory,subscriptionPricePoint"})
+    priced = {(p.get("relationships", {}).get("territory", {}).get("data") or {}).get("id"): p for p in prices}
+    base = priced.get(TERRITORY)
+    point = ((base or {}).get("relationships", {}).get("subscriptionPricePoint", {}).get("data") or {}).get("id")
+    if not point:
+        say(f"    {name}: 日本の価格が無いので、ほかの国の価格を決められない")
+        asc.problems.append(f"{name} no JPN price")
+        return
+    others = asc.get_all(f"/v1/subscriptionPricePoints/{point}/equalizations", {"include": "territory"})
+    missing = [(o["relationships"]["territory"]["data"]["id"], o["id"]) for o in others
+               if (o.get("relationships", {}).get("territory", {}).get("data") or {}).get("id") not in priced]
+    say(f"    {name}: 価格のある国 {len(priced)}、日本と同じ水準で足す国 {len(missing)}")
+    if not WRITE or not missing:
+        return
+    failed = 0
+    for terr, pp in missing:
+        status, _ = asc.call("POST", "/v1/subscriptionPrices", {"data": {
+            "type": "subscriptionPrices", "attributes": {"startDate": None, "preserveCurrentPrice": False, "planType": "UPFRONT"},
+            "relationships": {"subscription": asc.rel("subscriptions", sid), "territory": asc.rel("territories", terr),
+                              "subscriptionPricePoint": asc.rel("subscriptionPricePoints", pp)}}}, quiet=True)
+        failed += status not in (200, 201)
+    say(f"      -> 足した {len(missing) - failed}、失敗 {failed}")
+    if failed:
+        asc.problems.append(f"{name} prices failed {failed}")
+
+
 def diagnose(s):
     """What a subscription has, to see why App Store Connect says metadata is missing."""
     a, sid = s["attributes"], s["id"]
@@ -311,6 +341,7 @@ def purchases(app):
             say(f"  {s['attributes'].get('productId')}: {s['attributes'].get('state')}")
             if s["attributes"].get("state") == "MISSING_METADATA":
                 diagnose(s)
+                price_everywhere(s)
             sv = reviewable_version(f"/v1/subscriptions/{s['id']}/versions", "subscriptionVersions", "subscription",
                                     "subscriptions", s["id"], s["attributes"].get("name") or s["id"])
             if sv:

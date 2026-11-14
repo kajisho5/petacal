@@ -1,0 +1,50 @@
+# Gets the iPhone/iPad version ready for App Review and submits it (tools/asc_release.py).
+#   check  = read only / apply = set everything the API can set / submit = send to App Review
+# Release type is MANUAL: an approved version goes on sale only when the owner presses the button.
+# The App Store Connect key comes from runway's sync-secrets (ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64).
+# The App Review contact is passed as inputs (not stored in the repository).
+name: store-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check / apply / submit"
+        type: choice
+        options: [check, apply, submit]
+        default: check
+      contact_first:
+        description: "審査の連絡先：名"
+        required: false
+      contact_last:
+        description: "審査の連絡先：姓"
+        required: false
+      contact_phone:
+        description: "審査の連絡先：電話（+81 から）"
+        required: false
+      contact_email:
+        description: "審査の連絡先：メール"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the JWT library
+        run: pip install --quiet "pyjwt[crypto]"
+      - name: App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          BUNDLE_ID: com.seventhwell.petacal
+          MODE: ${{ inputs.mode }}
+          REVIEW_CONTACT_FIRST: ${{ inputs.contact_first }}
+          REVIEW_CONTACT_LAST: ${{ inputs.contact_last }}
+          REVIEW_CONTACT_PHONE: ${{ inputs.contact_phone }}
+          REVIEW_CONTACT_EMAIL: ${{ inputs.contact_email }}
+        run: python3 tools/asc_release.py "$MODE"

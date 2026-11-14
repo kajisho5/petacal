@@ -16,6 +16,8 @@ settings:
     SWIFT_EMIT_LOC_STRINGS: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     DEAD_CODE_STRIPPING: YES
+    # Google の OAuth クライアント ID（iOS 用。秘密の値ではない）。空のあいだは Google の連携を「準備中」と表示する。
+    GOOGLE_CLIENT_ID: ""
 packages:
   PetaCore:
     path: Packages/PetaCore
@@ -34,6 +36,7 @@ targets:
       properties:
         CFBundleDisplayName: ペタカレ
         CFBundleShortVersionString: $(MARKETING_VERSION)
+        GoogleClientID: $(GOOGLE_CLIENT_ID)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDevelopmentRegion: ja
         ITSAppUsesNonExemptEncryption: false
@@ -125,6 +128,7 @@ targets:
       properties:
         CFBundleDisplayName: ペタカレ
         CFBundleShortVersionString: $(MARKETING_VERSION)
+        GoogleClientID: $(GOOGLE_CLIENT_ID)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDevelopmentRegion: ja
         ITSAppUsesNonExemptEncryption: false

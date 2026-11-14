@@ -32,7 +32,7 @@ struct DaySheet: View {
                 ToolbarItem(placement: .barTrailing) {
                     Menu {
                         Button("予定を追加", systemImage: "calendar.badge.plus") { add() }
-                            .disabled(store.access != .granted)
+                            .disabled(!store.canAddEvents)
                         Button("記録を追加", systemImage: "square.and.pencil") {
                             sheet = .record(.new(day.date(calendar: store.calendar) ?? Date()))
                         }
@@ -72,7 +72,7 @@ struct DayContents: View {
                 ContentUnavailableView {
                     Label("この日はまだ何もありません", systemImage: "calendar")
                 } actions: {
-                    if store.access == .granted {
+                    if store.canAddEvents {
                         Button("予定を追加") {
                             let base = day.date(calendar: store.calendar) ?? Date()
                             sheet = .new(base.addingTimeInterval(9 * 3600), allDay: false)

@@ -19,6 +19,9 @@ struct EventItem: Identifiable, Hashable {
     let calendarTitle: String
     let calendarColor: RGB
     let location: String?
+
+    /// Events from Google come from the Google API, not EventKit (they cannot use the system edit screen).
+    var google: GoogleRef? { GoogleRef(key: eventIdentifier) }
 }
 
 struct CalendarInfo: Identifiable, Equatable {
@@ -60,9 +63,17 @@ final class CalendarStore {
     /// True when the store shows fixed sample items instead of the device calendars (screenshots, previews).
     private let isSample: Bool
 
+    /// Google calendars connected directly (nil in screenshots and previews).
+    let google: GoogleStore?
+    /// Device calendars hidden because the same Google account is connected directly.
+    private(set) var duplicateCalendarIDs: Set<String> = []
+
     init() {
         isSample = false
         hiddenCalendarIDs = Set(UserDefaults.standard.stringArray(forKey: CalendarStore.hiddenKey) ?? [])
+        let google = GoogleStore()
+        self.google = google
+        google.onChange = { [weak self] in self?.reload() }
     }
 
     func isVisible(_ id: String) -> Bool { !hiddenCalendarIDs.contains(id) }
@@ -76,6 +87,7 @@ final class CalendarStore {
     /// A store that never touches EventKit. For screenshots and previews, with fictional items.
     init(sample: [EventItem]) {
         isSample = true
+        google = nil
         hiddenCalendarIDs = []
         access = .granted
         sampleItems = sample.sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
@@ -108,7 +120,17 @@ final class CalendarStore {
         guard !isSample else { return }
         access = CalendarStore.currentAccess()
         reload()
+        if let google { Task { await google.loadAll() } }
     }
+
+    /// Pull to refresh: reads Google again even if it was read a moment ago.
+    func refreshNow() async {
+        reload()
+        await google?.loadAll(force: true)
+    }
+
+    /// Adding events works with either the device's calendars or a connected Google account.
+    var canAddEvents: Bool { access == .granted || !writableCalendars.isEmpty }
 
     func load(from: Date, to: Date) {
         range = (from, to)
@@ -120,21 +142,69 @@ final class CalendarStore {
             events = sampleItems.filter { isVisible($0.calendarID) }
             return
         }
-        guard access == .granted else {
+        var device: [CalendarInfo] = []
+        if access == .granted {
+            device = eventStore.calendars(for: .event)
+                .map { CalendarInfo(id: $0.calendarIdentifier, title: $0.title,
+                                    color: CalendarStore.rgb($0.cgColor), account: $0.source?.title ?? "",
+                                    writable: $0.allowsContentModifications) }
+        }
+        let emails = google?.accounts.map(\.email) ?? []
+        duplicateCalendarIDs = GoogleMerge.duplicateDeviceCalendars(device.map { (id: $0.id, account: $0.account) },
+                                                                    googleEmails: emails)
+        calendars = (device.filter { !duplicateCalendarIDs.contains($0.id) }
+                     + googleCalendars)
+            .sorted { ($0.account, $0.title) < ($1.account, $1.title) }
+        guard let range else {
             events = []
-            calendars = []
             return
         }
-        calendars = eventStore.calendars(for: .event)
-            .map { CalendarInfo(id: $0.calendarIdentifier, title: $0.title,
-                                color: CalendarStore.rgb($0.cgColor), account: $0.source?.title ?? "",
-                                writable: $0.allowsContentModifications) }
-            .sorted { ($0.account, $0.title) < ($1.account, $1.title) }
-        guard let range else { return }
-        let predicate = eventStore.predicateForEvents(withStart: range.from, end: range.to, calendars: nil)
-        events = eventStore.events(matching: predicate).map(CalendarStore.item)
+        events = items(from: range.from, to: range.to)
             .filter { isVisible($0.calendarID) }
             .sorted { $0.start != $1.start ? $0.start < $1.start : $0.title < $1.title }
+    }
+
+    /// Device and Google events in a range, before hiding switched-off calendars.
+    private func items(from: Date, to: Date) -> [EventItem] {
+        var result: [EventItem] = []
+        if access == .granted {
+            let predicate = eventStore.predicateForEvents(withStart: from, end: to, calendars: nil)
+            result = eventStore.events(matching: predicate).map(CalendarStore.item)
+                .filter { !duplicateCalendarIDs.contains($0.calendarID) }
+        }
+        return result + googleItems(from: from, to: to)
+    }
+
+    private var googleCalendars: [CalendarInfo] {
+        guard let google else { return [] }
+        return google.accounts.flatMap { account in
+            account.calendars.map { entry in
+                CalendarInfo(id: GoogleRef(email: account.email, calendarID: entry.id).calendarKey, title: entry.title,
+                             color: entry.color, account: account.email, writable: entry.writable && !account.needsSignIn)
+            }
+        }
+    }
+
+    private func googleItems(from: Date, to: Date) -> [EventItem] {
+        guard let google else { return [] }
+        return google.accounts.flatMap { account -> [EventItem] in
+            let entries = Dictionary(account.calendars.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            return (google.events[account.email] ?? []).compactMap { event in
+                guard event.end > from || (event.end == event.start && event.start >= from), event.start < to,
+                      let entry = entries[event.calendarID] else { return nil }
+                let ref = GoogleRef(email: account.email, calendarID: event.calendarID, eventID: event.id)
+                return EventItem(
+                    id: ref.key,
+                    eventIdentifier: ref.key,
+                    title: event.title.isEmpty ? String(localized: "（題名なし）") : event.title,
+                    start: event.start, end: event.end, isAllDay: event.isAllDay,
+                    calendarID: ref.calendarKey,
+                    calendarTitle: entry.title,
+                    calendarColor: GoogleMerge.color(of: event, calendarColor: entry.color, palette: google.palette,
+                                                     useEventColors: account.useEventColors),
+                    location: event.location)
+            }
+        }
     }
 
     /// New events can only go to calendars that are writable and shown.
@@ -143,7 +213,7 @@ final class CalendarStore {
     /// The calendar new events go to unless the person picks another one.
     var defaultCalendarID: String? {
         if isSample { return calendars.first?.id }
-        let preferred = eventStore.defaultCalendarForNewEvents?.calendarIdentifier
+        let preferred = access == .granted ? eventStore.defaultCalendarForNewEvents?.calendarIdentifier : nil
         return writableCalendars.contains { $0.id == preferred } ? preferred : writableCalendars.first?.id
     }
 
@@ -162,8 +232,12 @@ final class CalendarStore {
 
     /// Saves a draft and returns the new event's identifier.
     @discardableResult
-    func add(_ draft: QuickDraft) throws -> String? {
+    func add(_ draft: QuickDraft) async throws -> String? {
         guard !isSample else { return nil }
+        if let id = draft.calendarID, let target = GoogleRef(key: id), let google {
+            let made = try await google.insert(GoogleEventDraft(draft), into: target)
+            return made.key
+        }
         let event = makeEvent(from: draft)
         try eventStore.save(event, span: .thisEvent, commit: true)
         reload()
@@ -172,22 +246,19 @@ final class CalendarStore {
 
     /// Deletes an event that was just added (for "取り消す").
     func remove(eventIdentifier: String) {
-        guard !isSample, let event = eventStore.event(withIdentifier: eventIdentifier) else { return }
+        guard !isSample else { return }
+        if let ref = GoogleRef(key: eventIdentifier), let google {
+            Task { try? await google.delete(ref) }
+            return
+        }
+        guard let event = eventStore.event(withIdentifier: eventIdentifier) else { return }
         try? eventStore.remove(event, span: .thisEvent, commit: true)
         reload()
     }
 
     /// Times taken by timed events (all-day events do not count), for finding free time.
     func busyRanges(from: Date, to: Date) -> [TimeRange] {
-        let pool: [EventItem]
-        if isSample {
-            pool = sampleItems
-        } else if access == .granted {
-            pool = eventStore.events(matching: eventStore.predicateForEvents(withStart: from, end: to, calendars: nil))
-                .map(CalendarStore.item)
-        } else {
-            pool = []
-        }
+        let pool: [EventItem] = isSample ? sampleItems : items(from: from, to: to)
         return pool
             .filter { !$0.isAllDay && isVisible($0.calendarID) && $0.end > from && $0.start < to }
             .map { TimeRange(start: $0.start, end: $0.end) }
@@ -196,11 +267,9 @@ final class CalendarStore {
     /// Events from one year back to one year ahead, for searching.
     func eventsAround() -> [EventItem] {
         if isSample { return sampleItems.filter { isVisible($0.calendarID) } }
-        guard access == .granted,
-              let from = calendar.date(byAdding: .year, value: -1, to: Date()),
+        guard let from = calendar.date(byAdding: .year, value: -1, to: Date()),
               let to = calendar.date(byAdding: .year, value: 1, to: Date()) else { return [] }
-        let predicate = eventStore.predicateForEvents(withStart: from, end: to, calendars: nil)
-        return eventStore.events(matching: predicate).map(CalendarStore.item)
+        return items(from: from, to: to)
             .filter { isVisible($0.calendarID) }
             .sorted { $0.start > $1.start }
     }
@@ -247,6 +316,18 @@ final class CalendarStore {
         }
         return RGB(red: Double(r), green: Double(g), blue: Double(b))
         #endif
+    }
+}
+
+extension GoogleEventDraft {
+    /// A quick draft's all-day end is the last day itself; Google wants the day after.
+    init(_ draft: QuickDraft, calendar: Calendar = .current) {
+        var end = draft.end
+        if draft.isAllDay {
+            let last = calendar.startOfDay(for: max(draft.start, draft.end))
+            end = calendar.date(byAdding: .day, value: 1, to: last) ?? last
+        }
+        self.init(title: draft.title, start: draft.start, end: end, isAllDay: draft.isAllDay, location: draft.location)
     }
 }
 

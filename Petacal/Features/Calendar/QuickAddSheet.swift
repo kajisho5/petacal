@@ -18,6 +18,7 @@ struct QuickAddSheet: View {
     @State private var colorPreset: Int?
     @State private var confirmDiscard = false
     @State private var failed = false
+    @State private var saving = false
     /// The date and time last taken from the title, so rows edited by hand are not overwritten on every keystroke.
     @State private var applied: QuickAddParser.Result?
     @FocusState private var titleFocused: Bool
@@ -123,7 +124,7 @@ struct QuickAddSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存", systemImage: "checkmark") { save() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(title.isEmpty || store.writableCalendars.isEmpty)
+                        .disabled(title.isEmpty || store.writableCalendars.isEmpty || saving)
                 }
             }
             .alert("保存できませんでした", isPresented: $failed) {
@@ -177,16 +178,21 @@ struct QuickAddSheet: View {
     }
 
     private func save() {
-        do {
-            let identifier = try store.add(draft)
-            if let identifier, let colorPreset { colors.setEvent(identifier, preset: colorPreset) }
-            if let identifier {
-                let calendarStore = store
-                undo.show(String(localized: "予定を追加しました")) { calendarStore.remove(eventIdentifier: identifier) }
+        guard !saving else { return }
+        saving = true
+        Task {
+            defer { saving = false }
+            do {
+                let identifier = try await store.add(draft)
+                if let identifier, let colorPreset { colors.setEvent(identifier, preset: colorPreset) }
+                if let identifier {
+                    let calendarStore = store
+                    undo.show(String(localized: "予定を追加しました")) { calendarStore.remove(eventIdentifier: identifier) }
+                }
+                sheet = nil
+            } catch {
+                failed = true
             }
-            sheet = nil
-        } catch {
-            failed = true
         }
     }
 }

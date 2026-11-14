@@ -34,6 +34,7 @@ struct SettingsScreen: View {
                 Text("ペタカレ Pro")
             }
             Section("表示") {
+                NavigationLink("カレンダーのアカウント") { CalendarAccountsScreen() }
                 NavigationLink("表示するカレンダー") { VisibleCalendarsScreen() }
                 NavigationLink("カレンダーの表示") { PatternSettingsScreen() }
                 NavigationLink("色分け") { ColorSettingsScreen() }
@@ -330,7 +331,7 @@ struct VisibleCalendarsScreen: View {
                 Section {
                     Button("すべて表示") { store.calendars.forEach { store.setVisible($0.id, true) } }
                 } footer: {
-                    Text("オフにしたカレンダーの予定は、このアプリに出なくなります（元のカレンダーからは消えません）。カレンダーやアカウントの追加・削除は、端末の「設定」アプリのカレンダーの項目で行います。")
+                    Text("オフにしたカレンダーの予定は、このアプリに出なくなります（元のカレンダーからは消えません）。カレンダーやアカウントの追加・削除は、端末の「設定」アプリのカレンダーの項目で行います（Google は「カレンダーのアカウント」から直接つなげます）。")
                 }
             }
         }

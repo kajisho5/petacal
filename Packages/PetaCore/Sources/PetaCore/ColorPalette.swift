@@ -1,7 +1,7 @@
 import Foundation
 
 /// A colour as three 0...1 components.
-public struct RGB: Hashable, Sendable {
+public struct RGB: Hashable, Sendable, Codable {
     public let red: Double
     public let green: Double
     public let blue: Double

@@ -136,7 +136,7 @@ struct CalendarScreen: View {
             if store.access == .notDetermined && !records.isEmpty {
                 AccessAskBanner { Task { await store.requestAccess() } }
             }
-            if store.access == .notDetermined && records.isEmpty {
+            if store.access == .notDetermined && records.isEmpty && (store.google?.accounts.isEmpty ?? true) {
                 AccessIntro { Task { await store.requestAccess() } }
             } else {
                 content
@@ -159,11 +159,11 @@ struct CalendarScreen: View {
                     Button("予定を追加", systemImage: "calendar.badge.plus") {
                         sheet = .new(newEventStart(on: focus), allDay: false)
                     }
-                    .disabled(store.access != .granted)
+                    .disabled(!store.canAddEvents)
                     Button("貼り付けた文章から予定をつくる", systemImage: "doc.on.clipboard") {
                         sheet = .importText("")
                     }
-                    .disabled(store.access != .granted)
+                    .disabled(!store.canAddEvents)
                     Button("候補日をつくる（空き時間）", systemImage: "calendar.badge.clock") {
                         if entitlements?.isPro == false {
                             entitlements?.ask(String(localized: "候補日をつくるのは Pro の機能です"))
@@ -171,7 +171,7 @@ struct CalendarScreen: View {
                             sheet = .slots
                         }
                     }
-                        .disabled(store.access != .granted)
+                        .disabled(!store.canAddEvents)
                     Divider()
                     Button("記録を追加", systemImage: "square.and.pencil") {
                         sheet = .record(.new(focus.date(calendar: calendar) ?? Date()))
@@ -199,6 +199,7 @@ struct CalendarScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.refreshAccess() }
         }
+        .task { await store.google?.loadAll() }
         .onChange(of: router?.command, initial: true) { _, command in
             guard let command else { return }
             router?.command = nil
@@ -212,12 +213,12 @@ struct CalendarScreen: View {
         case .today: jump(to: today)
         case .newRecord: sheet = .record(.new(focus.date(calendar: calendar) ?? Date()))
         case .newEvent:
-            if store.access == .granted { sheet = .new(newEventStart(on: focus), allDay: false) }
+            if store.canAddEvents { sheet = .new(newEventStart(on: focus), allDay: false) }
         case .importText:
-            if store.access == .granted { sheet = .importText("") }
+            if store.canAddEvents { sheet = .importText("") }
         case .shared(let payload):
             let today = calendar.startOfDay(for: Date())
-            if payload.item.kind == .event, store.access == .granted {
+            if payload.item.kind == .event, store.canAddEvents {
                 sheet = .importText(payload.item.text)
             } else {
                 // A record, or an event while calendar access is off: keep it as a record draft.
@@ -405,7 +406,7 @@ struct CalendarScreen: View {
 
     /// Long press on a day: a new all-day event on that day.
     private func addAllDay(on day: DayKey) {
-        guard store.access == .granted, let date = day.date(calendar: calendar) else { return }
+        guard store.canAddEvents, let date = day.date(calendar: calendar) else { return }
         pressCount += 1
         sheet = .new(date, allDay: true)
     }
@@ -495,14 +496,22 @@ private struct CalendarSheetHost: ViewModifier {
             case .new(let date, let allDay):
                 QuickAddSheet(start: date, allDay: allDay, sheet: $sheet)
             case .compose(let draft):
-                EventEditor(store: store.eventStore, event: store.makeEvent(from: draft)) { store.reload(); sheet = nil }
-                    .ignoresSafeArea()
-            case .edit(let item):
-                EventEditor(store: store.eventStore, event: store.ekEvent(for: item)) {
-                    store.reload()
-                    sheet = nil
+                if let target = draft.calendarID.flatMap(GoogleRef.init(key:)) {
+                    GoogleEventEditor(target: target, draft: draft) { sheet = nil }
+                } else {
+                    EventEditor(store: store.eventStore, event: store.makeEvent(from: draft)) { store.reload(); sheet = nil }
+                        .ignoresSafeArea()
                 }
-                .ignoresSafeArea()
+            case .edit(let item):
+                if let ref = item.google {
+                    GoogleEventEditor(editing: ref, item: item) { sheet = nil }
+                } else {
+                    EventEditor(store: store.eventStore, event: store.ekEvent(for: item)) {
+                        store.reload()
+                        sheet = nil
+                    }
+                    .ignoresSafeArea()
+                }
             case .record(let target):
                 RecordEditor(target: target)
             case .importText(let text):

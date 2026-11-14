@@ -326,6 +326,10 @@ struct ImportTextSheet: View {
     }
 
     private func addChosen() {
+        Task { await addChosenNow() }
+    }
+
+    private func addChosenNow() async {
         var anyFailed = false
         var added: [String] = []
         for candidate in chosen {
@@ -342,7 +346,7 @@ struct ImportTextSheet: View {
                                    location: candidate.place)
             }
             do {
-                if let identifier = try store.add(draft) { added.append(identifier) }
+                if let identifier = try await store.add(draft) { added.append(identifier) }
             } catch {
                 anyFailed = true
             }

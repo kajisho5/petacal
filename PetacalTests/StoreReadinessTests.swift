@@ -22,7 +22,7 @@ struct StoreReadinessTests {
 
     @Test func versionAndEncryption() {
         let info = Bundle.main.infoDictionary ?? [:]
-        #expect(info["CFBundleShortVersionString"] as? String == "1.0")
+        #expect(info["CFBundleShortVersionString"] as? String == "1.1")
         #expect(info["ITSAppUsesNonExemptEncryption"] as? Bool == false)
     }
 }

@@ -261,17 +261,26 @@ def diagnose(s):
     say(f"    期間 {a.get('subscriptionPeriod')} 段階 {a.get('groupLevel')} 家族共有 {a.get('familySharable')} "
         f"組織向け {a.get('multiSeatStatus')} 市場の設定 {len(a.get('marketSettings') or [])} 件 審査メモ {'あり' if a.get('reviewNote') else 'なし'}")
     say(f"    価格 {len(asc.get_all(f'/v1/subscriptions/{sid}/prices'))} 件")
-    status, av = asc.call("GET", f"/v1/subscriptions/{sid}/subscriptionAvailability", {"include": "availableTerritories"}, quiet=True)
-    terr = [t["id"] for t in (av.get("data") or {}).get("relationships", {}).get("availableTerritories", {}).get("data", [])] if status == 200 else []
-    say(f"    販売する国 HTTP {status} {terr[:5]}")
+    status, av = asc.call("GET", f"/v1/subscriptions/{sid}/subscriptionAvailability", quiet=True)
+    if status == 200 and av.get("data"):
+        terr = [t["id"] for t in asc.get_all(f"/v1/subscriptionAvailabilities/{av['data']['id']}/availableTerritories")]
+        say(f"    販売する国 {terr[:5]}（全 {len(terr)}）")
+    else:
+        say(f"    販売する国: 未設定（HTTP {status}）")
+    for plan in asc.get_all(f"/v1/subscriptions/{sid}/planAvailabilities"):
+        terr = [t["id"] for t in asc.get_all(f"/v1/subscriptionPlanAvailabilities/{plan['id']}/availableTerritories")]
+        say(f"    プラン {plan['attributes'].get('planType')}: 国 {terr[:5]}（全 {len(terr)}）")
     status, shot = asc.call("GET", f"/v1/subscriptions/{sid}/appStoreReviewScreenshot", quiet=True)
     st = ((shot.get("data") or {}).get("attributes") or {}).get("assetDeliveryState") if status == 200 else None
     say(f"    審査用の画像 HTTP {status} {st}")
     locs = [(x["attributes"].get("locale"), x["attributes"].get("state")) for x in asc.get_all(f"/v1/subscriptions/{sid}/subscriptionLocalizations")]
     say(f"    説明（以前の形） {locs}")
-    offers = asc.get_all(f"/v1/subscriptions/{sid}/introductoryOffers")
-    plans = asc.get_all(f"/v1/subscriptions/{sid}/planAvailabilities")
-    say(f"    お試し {len(offers)} 件 プラン {len(plans)} 件")
+    say(f"    お試し {len(asc.get_all(f'/v1/subscriptions/{sid}/introductoryOffers'))} 件")
+    # Selling to organizations (Apple Business / Apple School) is on by default for new subscriptions;
+    # this app is for one person's own calendar, so it is sold on the App Store only.
+    if a.get("multiSeatStatus") != "DISABLED" or (a.get("marketSettings") or []) != ["APP_STORE"]:
+        patch("subscriptions", sid, {"multiSeatStatus": "DISABLED", "marketSettings": ["APP_STORE"]},
+              "組織向けの販売を止め、App Store だけで売る", current=a)
 
 
 def purchases(app):

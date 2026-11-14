@@ -16,8 +16,8 @@ settings:
     SWIFT_EMIT_LOC_STRINGS: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     DEAD_CODE_STRIPPING: YES
-    # Google の OAuth クライアント ID（iOS 用。秘密の値ではない）。空のあいだは Google の連携を「準備中」と表示する。
-    GOOGLE_CLIENT_ID: ""
+    # Google の OAuth クライアント ID（iOS 用。秘密の値ではない）。空にすると Google の連携は「準備中」と表示する。
+    GOOGLE_CLIENT_ID: 817482442530-bqh5qfrfmdkannl1tti81qe365r66rd7.apps.googleusercontent.com
 packages:
   PetaCore:
     path: Packages/PetaCore

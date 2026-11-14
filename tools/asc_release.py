@@ -115,12 +115,15 @@ def app_level(app, info):
     else:
         say("  配信する国・地域: 日本にする")
         if WRITE:
+            # Every territory has to be listed: Japan available, the others not.
+            territories = [t["id"] for t in asc.get_all("/v1/territories")]
+            refs = [{"type": "territoryAvailabilities", "id": f"${{{t}}}"} for t in territories]
+            included = [{"type": "territoryAvailabilities", "id": f"${{{t}}}", "attributes": {"available": t == TERRITORY},
+                         "relationships": {"territory": asc.rel("territories", t)}} for t in territories]
             status, _ = asc.call("POST", "/v2/appAvailabilities", {
                 "data": {"type": "appAvailabilities", "attributes": {"availableInNewTerritories": False},
-                         "relationships": {"app": asc.rel("apps", app["id"]),
-                                           "territoryAvailabilities": {"data": [{"type": "territoryAvailabilities", "id": "${jpn}"}]}}},
-                "included": [{"type": "territoryAvailabilities", "id": "${jpn}", "attributes": {"available": True},
-                              "relationships": {"territory": asc.rel("territories", TERRITORY)}}]})
+                         "relationships": {"app": asc.rel("apps", app["id"]), "territoryAvailabilities": {"data": refs}}},
+                "included": included})
             say(f"    -> HTTP {status}")
 
 

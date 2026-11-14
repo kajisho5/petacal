@@ -570,3 +570,68 @@ S-09〜S-14 の iPad・Mac・iPhone Duo 内側での見え方：どれもシー�
 - Foundation Models の日本語での読み取りの良し悪し、iPhone Duo の実際の折り目の幅（どちらも実機で未確認）。Apple の資料は API の説明ページだけを読み、iPhone Duo の解説動画（Tech Talks）は見ていない
 - Mac の SDK に `reservedRegions` が無かった（Xcode 27.1 でビルドエラー）。Apple のページには macOS 27.1 以降とあるので、ランナーの Mac 用 SDK が古い可能性がある【推測】。Mac には折り目が無いので iPhone だけで使う形にした
 - EventKit の予定（EKEvent／EKCalendarItem）の全項目。予定1件ごとの色の項目が無いことは、一覧の一部を見ただけで、全部は確認していない
+
+---
+
+## C. Google カレンダーとの直接の連携（設計・2026-11-14・確認待ち）
+
+### 1. 目的と範囲
+
+- Google アカウントをアプリから直接つなぎ、Google カレンダーの予定を表示・追加・変更・削除する。**予定ごとの Google の色**（colorId）もそのまま出す（設定アプリ経由の今の方法では出せない）。
+- 対象：iPhone／iPad／Mac（同じコード）。バージョン 1.1 で入れる（1.0 は審査中のため触らない）。
+- 範囲外：Exchange／Outlook／Microsoft 365 の直接の連携（あとで同じ形で足す）、Google 以外の色の取り込み。
+
+### 2. 技術の選び方
+
+| 案 | 動作の軽さ | 配布サイズ | 作りやすさ | 対応OS | 将来性 | AI での書きやすさ |
+|---|---|---|---|---|---|---|
+| **A. 自前の OAuth（PKCE）＋ Google Calendar API（REST）** | ◎ 標準の部品だけ | ◎ 増えない | ○ ログインと通信を自分で書く | iOS／iPadOS／macOS（ASWebAuthenticationSession） | ◎ Google の公開の仕様 | ◎ |
+| B. Google Sign-In の SDK | ○ | △ 増える | ◎ | iOS／macOS | ○ | ○ |
+| C. 今のまま（設定アプリにアカウントを追加） | ◎ | ◎ | ◎ 作業なし | 全部 | ○ | ― |
+
+**おすすめ：A**。理由：外部ライブラリを入れない決まり（CLAUDE.md）に合い、予定ごとの色が出せる。B は外部ライブラリになる。C は色が出ない。
+- 根拠：iPhone アプリ用の Google の OAuth クライアントには秘密の鍵が無く、リダイレクトは Client ID を逆にした独自 URL スキーム（例 `com.googleusercontent.apps.<ID>:/oauth2redirect`）を使う（Google 公式「OAuth 2.0 for Mobile & Desktop Apps」https://developers.google.com/identity/protocols/oauth2/native-app 、AppAuth の Google 向けの説明）。
+- 権限（スコープ）：`calendar.events`（予定の読み書き）と、カレンダーの一覧と色の読み取り用の読み取り専用スコープ。どちらも Google の分類で「センシティブ」で、一般公開には Google の確認（動画つき）が要る（https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification ）。一覧用のスコープの正確な名前は、作り始める前に Google の資料で確かめる（未確認）。
+- 確認が済むまでは「テスト」の状態で、登録したテスト用のアカウント（本人）だけが使える。
+
+### 3. 画面
+
+| ID | 名前 | 目的 | 主な要素 | 入り口 |
+|---|---|---|---|---|
+| S-16 | カレンダーのアカウント | どのカレンダーを使うかを選ぶ | 「この iPhone」（今の EventKit のカレンダー）、「Google」（つないだアカウント、カレンダーの数）、「Google アカウントを追加」 | 設定 |
+| S-17 | Google につなぐ前の説明 | 何を見て何を変えるか、どこに送るかを先に伝える | 記号、見るもの／変えるもの／送り先／やめるとき、「続ける」（ボタンは1つ） | S-16 の「Google アカウントを追加」 |
+| （標準） | Google のログインと許可 | ― | システムの ASWebAuthenticationSession の画面（モックは描かない） | S-17 の「続ける」 |
+| S-18 | Google アカウント | 表示するカレンダー、色、解除 | カレンダーごとのスイッチ（Google の色の丸）、「予定ごとの Google の色を使う」、最後に読み込んだ時刻、「接続を解除」（赤。確認のアラート：キャンセル／解除） | S-16 のアカウントの行 |
+
+モック：`design/mocks/iphone-S-16-*.svg`（通常・Google なし・ログインし直し）、`iphone-S-17-*.svg`、`iphone-S-18-*.svg`（通常・解除の確認）。ライトとダーク。確認用の一覧 `design/overview/google-overview.png`。iPad と Mac は同じ一覧の画面（Mac は設定のウインドウの中）。
+
+### 4. 動き
+
+- 予定の一覧・月の帯・週・日では、EventKit の予定と Google の予定を同じように並べる。Google の予定の色は、「予定ごとの色」がオンなら予定の colorId、オフならカレンダーの色。ユーザーが ColorStore で選んだ色があればそれを優先する（今と同じ）。
+- 新しい予定・編集・削除：保存先のカレンダーが Google なら API で書く。終日・時刻・場所・メモ・色を扱う。
+- 同じ Google アカウントが設定アプリにもあるとき：その EventKit のカレンダー（アカウント名がメールアドレスと同じもの）を隠して、二重に出さない。
+- 読み込み：表示している月の前後1か月。画面を開いたとき、前面に戻ったとき、引っぱって更新したとき。変更の差分は syncToken で取る。電波が無いときは最後に読み込んだ予定を出し、一覧の上に「最後に読み込んだ予定を表示しています」。
+- ログインの情報（リフレッシュトークン）はキーチェーンにだけ保存。開発者のサーバーは使わない。期限切れ・取り消し（invalid_grant）のときは S-16 の行を「ログインし直してください」にする。
+- 接続を解除：トークンを Google で取り消し、キーチェーンと保存した予定を消す。Google 側の予定は消えない。
+- 状態の保存：表示するカレンダーの選択と色の設定は端末に保存。
+
+### 5. 状態と文言
+
+| 画面 | 空 | 読み込み中 | エラー |
+|---|---|---|---|
+| S-16 | Google なし：「Google アカウントを追加」だけ（モックあり） | 行の右に小さな進行表示 | ログインし直し（モックあり） |
+| S-18 | カレンダーが0件：「表示できるカレンダーがありません」 | 一覧の位置に進行表示 | 読み込めない：「Google から読み込めませんでした。通信の状態を確かめて、もう一度試してください」＋「もう一度」 |
+
+### 6. プライバシーと審査
+
+- プライバシーポリシー（https://seventh-well.com/petacal/privacy/ ）に「Google のデータ」の節を足す：読むもの、使い道（このアプリの画面に出すだけ）、保存場所（端末）、第三者に渡さない、Google API Services User Data Policy（Limited Use を含む）に従うこと。
+- App Store の「App のプライバシー」：データは開発者に送らないので「データを収集しない」のままでよい、と推測（提出の前にもう一度確かめる）。
+- Google の確認の申請に要るもの：アプリのホームページ（https://seventh-well.com/petacal/ ）、プライバシーポリシー、ドメインの所有の確認（seventh-well.com）、許可から予定の表示までを見せる動画。
+
+### 7. 本人の作業（Google のサイト。設計の確認のあと、URL と押す場所を渡す）
+
+1. Google Cloud のプロジェクトを作る
+2. Google Calendar API を有効にする
+3. OAuth の同意画面（アプリ名・サポートのメール・ホームページ・プライバシーポリシー・スコープ・テストユーザー）
+4. iOS 用の OAuth クライアントを作る（Bundle ID `com.seventhwell.petacal`）→ Client ID をこちらに伝える（秘密の値ではない）
+5. （一般公開の前）Google の確認の申請
